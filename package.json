@@ -1,0 +1,27 @@
+{
+  "name": "cosmic-phantom",
+  "version": "3.1.0",
+  "description": "本地优先、可追溯且经用户确认的 Agent 长期记忆 / Local-first, auditable long-term memory for AI agents",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "inject": "node inject.js",
+    "resume": "node resume-context.js check",
+    "arrival-check": "node arrival-check.js",
+    "reply-check": "node reply-check.js",
+    "public-check": "node scripts/check-public-surface.cjs",
+    "log": "node log_turn.js",
+    "validate": "node validate.js",
+    "plugin:sync-engine": "node scripts/packaging/sync-plugin-engine.cjs",
+    "plugin:check": "node scripts/packaging/check-plugin.cjs",
+    "plugin:pack": "node scripts/packaging/pack-plugin.cjs",
+    "plugin:test": "node tests/plugin-p0-test.mjs",
+    "plugin:health": "node plugin/launcher.cjs health",
+    "test:memory-domains": "node tests/memory-domains-integration-test.js",
+    "test": "node --experimental-sqlite tests/event-concurrency-test.mjs && node tests/memory-domains-integration-test.js && node tests/plugin-p0-test.mjs && node tests/candidate-memory-test.js && node tests/candidate-integrity-test.js && node tests/candidate-review-test.js && node --experimental-sqlite tests/candidate-distill-events-test.mjs && node tests/candidate-mcp-test.js && node tests/candidate-surface-test.js && node tests/candidate-migration-test.js && node tests/legacy-memory-compat-test.js && node tests/identity-card-test.js && node tests/continuity-recovery-test.js && node tests/retrieval-golden-test.js && node tests/hybrid-retrieval-test.js && node --experimental-sqlite tests/zcode-flush-test.js && node --experimental-sqlite tests/flush-reminder-test.js && node --experimental-sqlite tests/session-adapter-test.js && node tests/recovery-test.js && node tests/continuity-test.js && node tests/sandbox-test.js && node --experimental-sqlite tests/regression-test.js && node tests/work-test.js && node tests/f23-test.mjs && node --experimental-sqlite tests/daily-project-test.js && node tests/context-lint-test.js && node tests/intent-routing-test.mjs && node --experimental-sqlite tests/export-redact-test.js && node --experimental-sqlite tests/event-index-test.js && node tests/coverage-cards-test.js && node --experimental-sqlite tests/evidence-stop-test.js && node tests/sync-gate-test.mjs && node tests/failopen-counter-test.mjs && node tests/cp-sync-data-test.mjs && node tests/root-mode-test.mjs && node tests/graph-refine-test.mjs && node tests/resume-capsule-test.mjs && node tests/abstain-test.mjs && node tests/doctor-test.mjs && node tests/dream-test.mjs && node tests/dream-propose-test.mjs && node tests/dream-accept-test.mjs && node tests/dates-test.mjs && node tests/privacy-probe-test.mjs && node tests/fingerprint-content-test.js && node --experimental-sqlite tests/write-fields-test.js && node --experimental-sqlite tests/insufficient-gate-test.js && node --experimental-sqlite tests/supersede-test.js && node --experimental-sqlite tests/source-root-test.js && node --experimental-sqlite tests/event-exit-test.js",
+    "ci": "node scripts/ci.cjs"
+  },
+  "dependencies": {
+    "onnxruntime-node": "^1.31.1"
+  }
+}

@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cosmic-phantom.local/schemas/adapter-event.schema.json",
+  "title": "Normalized CP Adapter Event",
+  "type": "object",
+  "required": ["source_instance", "source_id", "revision", "session_id", "role", "ts", "scope", "source_kind", "source_ref"],
+  "properties": {
+    "source_instance": { "type": "string", "minLength": 1 },
+    "source_id": { "type": "string", "minLength": 1 },
+    "revision": { "type": "integer", "minimum": 1 },
+    "session_id": { "type": "string", "minLength": 1 },
+    "role": { "enum": ["user", "assistant", "tool", "system"] },
+    "content": { "type": "string" },
+    "ts": { "type": "string", "format": "date-time" },
+    "scope": { "enum": ["global", "workspace", "agent"] },
+    "source_kind": { "type": "string", "minLength": 1 },
+    "source_ref": { "type": "string", "minLength": 1 },
+    "cursor": {}
+  },
+  "additionalProperties": true
+}

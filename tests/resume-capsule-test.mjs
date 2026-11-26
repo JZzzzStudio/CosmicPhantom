@@ -1,0 +1,46 @@
+#!/usr/bin/env node
+// resume-capsule-test.mjs — T01 四项指纹（2026-11-18）
+// 缝：CLI 的 fingerprint/check 输出。覆盖：齐备=ok / 缺 events=BLOCKED / 改卡=digest 变 / 幂等稳定
+import { spawnSync } from "node:child_process";
+import { mkdtempSync, mkdirSync, copyFileSync, writeFileSync, rmSync, existsSync } from "node:fs";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
+const REPO = new URL("..", import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, "$1");
+const NODE = process.execPath, TMP = mkdtempSync(join(tmpdir(), "cp-capsule-"));
+let pass = 0, fail = 0;
+const ok = (n, c, d) => { c ? (pass++, console.log("  ✓ " + n)) : (fail++, console.log("  ✗ " + n + (d ? " — " + d : ""))); };
+const R = (args) => { const r = spawnSync(NODE, [join(TMP, "resume-context.js"), ...args, "--root", TMP], { encoding: "utf8", timeout: 60000 }); try { return JSON.parse((r.stdout || "").trim()); } catch { return { raw: r.stdout, err: r.stderr }; } };
+for (const f of ["resume-context.js", "current-state.js"]) copyFileSync(join(REPO, f), join(TMP, f));
+for (const f of ["MEMORY.md", "reply-policy.json", "RESUME.md"]) if (existsSync(join(REPO, f))) copyFileSync(join(REPO, f), join(TMP, f));
+mkdirSync(join(TMP, "core"), { recursive: true }); mkdirSync(join(TMP, ".context"), { recursive: true }); mkdirSync(join(TMP, "memories"), { recursive: true });
+for (const f of ["core/rules.md", "core/reply-style.md", ".context/CONTEXT.md"]) copyFileSync(join(REPO, f), join(TMP, f));
+writeFileSync(join(TMP, "current-state.json"), JSON.stringify({ schemaVersion: 1, revision: 7, updatedAt: new Date().toISOString(), updatedBy: "test", source: "test", status: "active", objective: "t", summary: "", completed: [], nextActions: [], blockers: [], decisions: [], workingFiles: [], verification: [] }));
+writeFileSync(join(TMP, "memories", "2026-11.md"), "---\nid: 20261101-0001\nstatus: 🟢当前\ntype: 事件\ntags: [a]\n---\nA\n\n---\nid: 20261101-0002\nstatus: 🟢当前\ntype: 事件\ntags: [b]\n---\nB\n");
+// 让 TMP 成为一个真 git 仓（引擎仓提交是四项指纹之一）
+spawnSync("git", ["-C", TMP, "init", "-q"]);
+spawnSync("git", ["-C", TMP, "-c", "user.name=t", "-c", "user.email=t@local", "commit", "-q", "--allow-empty", "-m", "init"]);
+// 造一个可读 events.db
+const mk = spawnSync(NODE, ["--experimental-sqlite", "-e",
+  "const {DatabaseSync}=require('node:sqlite');const d=new DatabaseSync(process.argv[1]);d.exec('create table events(id integer primary key, raw text)');d.exec(\"insert into events(raw) values('x'),('y')\");",
+  join(TMP, "events.db")], { encoding: "utf8" });
+ok("测试夹具 events.db 可读", mk.status === 0, mk.stderr);
+let j = R(["fingerprint"]);
+ok("四项指纹齐备 → ok", j.ok === true, JSON.stringify(j.blocked));
+ok("  卡集合 2 张", j.fingerprints?.cards?.count === 2, JSON.stringify(j.fingerprints?.cards));
+ok("  事件 2 条", j.fingerprints?.events === 2, String(j.fingerprints?.events));
+ok("  状态版本 7", j.fingerprints?.stateRevision === 7, String(j.fingerprints?.stateRevision));
+const digest1 = j.fingerprints?.cards?.digest;
+let j2 = R(["fingerprint"]);
+ok("幂等：两次 digest 相同", j2.fingerprints?.cards?.digest === digest1, `${digest1} vs ${j2.fingerprints?.cards?.digest}`);
+writeFileSync(join(TMP, "memories", "2026-11.md"), "---\nid: 20261101-0001\nstatus: 🟢当前\ntype: 事件\ntags: [a]\n---\nA\n");
+j2 = R(["fingerprint"]);
+ok("改卡集合 → digest 变化", j2.fingerprints?.cards?.digest !== digest1, `${digest1} → ${j2.fingerprints?.cards?.digest}`);
+rmSync(join(TMP, "events.db"));
+j2 = R(["fingerprint"]);
+ok("缺 events.db → ok:false 且指名", j2.ok === false && (j2.blocked || []).some(b => b.includes("events")), JSON.stringify(j2.blocked));
+// check 也要连带 BLOCKED（不能只靠 fingerprint）
+const c = R(["check", "--strict"]);
+ok("check --strict 连带 blocked（不只 fingerprint 有）", c.ok === false && Array.isArray(c.blocked) && c.blocked.length > 0, JSON.stringify(c).slice(0, 160));
+rmSync(TMP, { recursive: true, force: true });
+console.log(`\n${pass} passed / ${fail} failed`);
+if (fail) process.exit(1);

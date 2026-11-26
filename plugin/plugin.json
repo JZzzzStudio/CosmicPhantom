@@ -1,0 +1,37 @@
+{
+  "schemaVersion": 1,
+  "id": "cosmic-phantom",
+  "displayName": "Cosmic Phantom",
+  "kind": "generic-agent-plugin",
+  "description": "通用型 Agent 插件：本地优先、可回放、可审计的记忆引擎。",
+  "version": "3.1.0",
+  "runtime": {
+    "node": ">=22.5.0"
+  },
+  "entrypoint": "launcher.cjs",
+  "engineRoot": "engine",
+  "commands": [
+    "configure",
+    "status",
+    "health",
+    "doctor",
+    "verify",
+    "enable",
+    "disable",
+    "sync",
+    "ingest",
+    "uninstall",
+    "upgrade"
+  ],
+  "adapters": [
+    { "id": "manual", "version": "1.0.0", "manifest": "adapters/manual/adapter.json" },
+    { "id": "jsonl", "version": "1.0.0", "manifest": "adapters/jsonl/adapter.json" },
+    { "id": "transcript", "version": "1.0.0", "manifest": "adapters/transcript/adapter.json" }
+  ],
+  "dataContract": {
+    "instanceMetaDir": ".cp",
+    "preserveOnDisable": ["events.db", "memories", "candidates", "config", "cursors"],
+    "preserveOnUninstall": ["events.db", "memories", "candidates", "config", "cursors", "daily", "distilled"],
+    "deleteOnlyWithExplicitAction": true
+  }
+}

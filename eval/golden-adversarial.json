@@ -1,0 +1,46 @@
+{
+  "name": "adversarial",
+  "note": "抗干扰题：strict_top1=true，要求 top1 命中正确关键词；旧信息/过期卡排在 top1 即失败。",
+  "cases": [
+    {
+      "id": "ADV-01",
+      "考点": "宿主边界（抗旧信息）",
+      "query": "CP 的主宿主是谁",
+      "expect_keyword": "主宿主",
+      "note": "正确：当前接入边界中的主宿主；旧信息可能记录另一种宿主关系",
+      "strict_top3": true
+    },
+    {
+      "id": "ADV-02",
+      "考点": "ADR 机制（抗过期规则）",
+      "query": "ADR 机制还在用吗",
+      "expect_keyword": "ADR",
+      "note": "正确：ADR 已废除，决策进决策卡；当前卡池可能缺这条规则",
+      "strict_top3": true
+    },
+    {
+      "id": "ADV-03",
+      "考点": "三端运维（抗旧习惯）",
+      "query": "当前宿主需要同步另一宿主的技能吗",
+      "expect_keyword": "不再",
+      "note": "正确：三端 retired，不再同步；旧卡可能仍说同步",
+      "strict_top3": true
+    },
+    {
+      "id": "ADV-04",
+      "考点": "蒸馏周期（抗旧参数）",
+      "query": "蒸馏多少天触发",
+      "expect_keyword": "一周",
+      "note": "正确：7 天（2026-08-13 用户定）；旧档案说 30 天/月度",
+      "strict_top3": true
+    },
+    {
+      "id": "ADV-05",
+      "考点": "文风裁决（抗未决）",
+      "query": "context-mode 不强制文风采纳了吗",
+      "expect_keyword": "否决",
+      "note": "正确：2026-10-28 否决，维持门禁 13 条",
+      "strict_top3": true
+    }
+  ]
+}

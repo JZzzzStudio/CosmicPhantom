@@ -1,0 +1,9 @@
+{
+  "at": "2026-11-26T11:38:22.903Z",
+  "reason": "公开发布前将 heldout 改为合成题集，并移除公开评测中的宿主专名；保留评测字段契约与指标用途。",
+  "sets": {
+    "golden-set.json": "9bced33ffd1f35eb2413c0317f79f299fab49d5f69004d8327e39a39259cf896",
+    "golden-heldout.json": "c5aaa48ae3471112b52d4882a142df7151f6e615797e2193d94990604c6e910d",
+    "golden-adversarial.json": "a036d487ef8e8ba65f9fadbe1a1056dfe579b0c00b1859f0a10f16ebc09e59c5"
+  }
+}

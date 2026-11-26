@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cosmic-phantom.local/schemas/plugin-manifest.schema.json",
+  "title": "Generic Agent Plugin Manifest",
+  "type": "object",
+  "required": ["schemaVersion", "id", "displayName", "kind", "version", "runtime", "entrypoint", "engineRoot", "commands", "dataContract"],
+  "properties": {
+    "schemaVersion": { "type": "integer", "const": 1 },
+    "id": { "type": "string", "pattern": "^[a-z][a-z0-9-]{2,63}$" },
+    "displayName": { "type": "string", "minLength": 1, "maxLength": 120 },
+    "kind": { "const": "generic-agent-plugin" },
+    "description": { "type": "string", "maxLength": 500 },
+    "version": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+(?:-[0-9A-Za-z.-]+)?$" },
+    "runtime": {
+      "type": "object",
+      "required": ["node"],
+      "properties": { "node": { "type": "string", "minLength": 1 } },
+      "additionalProperties": false
+    },
+    "entrypoint": { "type": "string", "pattern": "^(?!/)(?!.*(?:^|/|\\\\)\\.\\.(?:/|\\\\|$)).+$" },
+    "engineRoot": { "type": "string", "pattern": "^(?!/)(?!.*(?:^|/|\\\\)\\.\\.(?:/|\\\\|$)).+$" },
+    "commands": { "type": "array", "items": { "type": "string" }, "minItems": 1, "uniqueItems": true },
+    "adapters": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "version", "manifest"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^[a-z][a-z0-9-]{1,63}$" },
+          "version": { "type": "string" },
+          "manifest": { "type": "string" }
+        },
+        "additionalProperties": false
+      }
+    },
+    "dataContract": {
+      "type": "object",
+      "required": ["instanceMetaDir", "preserveOnUninstall", "deleteOnlyWithExplicitAction"],
+      "properties": {
+        "instanceMetaDir": { "type": "string", "const": ".cp" },
+        "preserveOnDisable": { "type": "array", "items": { "type": "string" } },
+        "preserveOnUninstall": { "type": "array", "items": { "type": "string" }, "minItems": 1 },
+        "deleteOnlyWithExplicitAction": { "const": true }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

@@ -1,0 +1,47 @@
+{
+  "schemaVersion": 1,
+  "note": "外部基准数据集不入仓（体积/许可）。任何外部数字（LoCoMo / LongMemEval）只有在 sha256 填好且与本地文件一致时才算可复现；sha256=null 表示当前不可复现，报告里必须注明。",
+  "verify": "node eval/external/manifest-check.cjs（若不存在则按本表手工核对：sha256sum <file>）",
+  "datasets": [
+    {
+      "name": "locomo10.json",
+      "path": "eval/external/data/locomo10.json",
+      "origin": "LoCoMo（ACL 2024）官方仓库 data/locomo10.json（snap-research/locomo）",
+      "sizeHint": "约 2.6MB / 10 段长对话 / 1982 QA",
+      "sha256": "553cd5a15e25f2ceccc6ed185221eba645080c93e5b91087560a91aa5961f365",
+      "usedBy": [
+        "eval/external/locomo-run.mjs"
+      ],
+      "baseline": {
+        "turns": 44.2,
+        "sessionCards": 47.7,
+        "top": 5,
+        "metric": "evidence recall@5（加权，1982 QA，带 provenance）"
+      },
+      "downloadedAt": "2026-11-19",
+      "sourceRepo": "https://github.com/snap-research/locomo（data/locomo10.json，depth 1 clone 后复制）",
+      "bytes": 2872024
+    },
+    {
+      "name": "longmemeval_oracle.json",
+      "path": "eval/external/data/longmemeval_oracle.json",
+      "origin": "LongMemEval（ICLR 2025）oracle 变体",
+      "sizeHint": "500 instance",
+      "sha256": null,
+      "usedBy": [
+        "eval/external/longmemeval-run.mjs"
+      ],
+      "baseline": {
+        "sessionRecallAt5": 86,
+        "abstentionEmpty": "0/30",
+        "top": 5
+      }
+    }
+  ],
+  "howToFill": [
+    "1) 把官方数据集放到 path 指定的位置",
+    "2) 算 sha256： node -e \"const c=require('node:crypto'),f=require('node:fs');console.log(c.createHash('sha256').update(f.readFileSync('<file>')).digest('hex'))\"",
+    "3) 把值填进 sha256 字段并提交本文件（这是让外部数字变可复现的唯一动作）",
+    "4) 重跑 eval/METRICS.md 里对应命令，确认与 baseline 一致"
+  ]
+}

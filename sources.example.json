@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 1,
+  "note": "匿名来源注册表示例。请在实例目录中复制并填写当前机器可读的来源；不要把私人会话目录或事件数据提交到代码仓。",
+  "sources": [
+    {
+      "name": "transcript-source",
+      "kind": "jsonl",
+      "dir": "<TRANSCRIPT_DIR>",
+      "instancePrefix": "instance-",
+      "midCheck": {
+        "take": 8
+      },
+      "enabled": false,
+      "note": "逐行会话来源示例；启用前确认目录属于当前实例。"
+    },
+    {
+      "name": "manual",
+      "kind": "session",
+      "dir": null,
+      "instancePrefix": "manual-",
+      "enabled": true,
+      "note": "没有转录文件时，由 session-adapter 写入的手工事件来源。"
+    }
+  ]
+}

@@ -1,0 +1,6 @@
+{
+  "id": "jsonl",
+  "version": "1.0.0",
+  "kind": "jsonl",
+  "description": "从 JSONL 文件读取并标准化事件。"
+}

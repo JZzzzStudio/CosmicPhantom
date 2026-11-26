@@ -1,0 +1,5 @@
+ARCHIVED INSTALL NOTE
+
+This historical USB bootstrap was tied to a private machine layout and host-specific configuration. It is no longer a supported installation route and contains no current asset or credential instructions.
+
+Use the public repository README and docs/AGENT-CONFIG.md instead. Keep source code, instance data, credentials, and runtime downloads separate.

@@ -1,0 +1,33 @@
+{
+  "schemaVersion": 1,
+  "note": "公开清单只列出可从上游地址获取的运行时工具。可选向量模型在有可验证的公开发行资产和校验和前不列入安装路径；缺失模型时检索回退到 BM25。",
+  "assets": [
+    {
+      "name": "node-runtime",
+      "dest": "tools/node",
+      "kind": "zip",
+      "url": "https://nodejs.org/dist/v22.12.0/node-v22.12.0-win-x64.zip",
+      "stripTop": "node-v22.12.0-win-x64",
+      "verify": {
+        "file": "node.exe",
+        "args": ["-v"],
+        "expect": "v22.12.0"
+      },
+      "required": true,
+      "note": "也可以直接使用当前环境中满足版本要求的 Node.js。"
+    },
+    {
+      "name": "git-portable",
+      "dest": "tools/git",
+      "kind": "zip",
+      "url": "https://github.com/git-for-windows/git/releases/download/v2.56.0.windows.1/MinGit-2.56.0-64-bit.zip",
+      "verify": {
+        "file": "cmd/git.exe",
+        "args": ["--version"],
+        "expect": "2.56.0"
+      },
+      "required": true,
+      "note": "也可以直接使用当前环境中的 Git。"
+    }
+  ]
+}

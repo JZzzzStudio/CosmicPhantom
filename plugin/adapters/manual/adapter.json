@@ -1,0 +1,6 @@
+{
+  "id": "manual",
+  "version": "1.0.0",
+  "kind": "manual",
+  "description": "用户显式提交的统一事件输入。"
+}

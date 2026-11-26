@@ -1,0 +1,11 @@
+# 发布体检白名单（票 08）：每行「路径 原因」。只登记历史记录/测试夹具/注释里的旧机残留。
+# 纪律：新增白名单必须写原因；能动代码改的不要进这里。
+docs/legacy/HOST-INSTALL-GUIDE.md 历史安装指南引用旧机用户名，属记录不是配置
+core/blindspot-ledger.md 历史验证记录含旧机测试路径
+core/rules.md 历史规则正文引用旧机用户名
+docs/legacy/ 历史手册和交付说明保留旧路径/用户名，仅作档案
+scripts/packaging/pack-bundle.cjs 注释说明占位符替换规则，含示例路径
+sources.example.json 示例说明文字
+tests/expand-test.js 测试夹具
+tests/legacy/packaging/lander-bundle-test.js 测试夹具
+scripts/legacy/packaging/upgrade-prepare.js 注释说明旧机路径假设

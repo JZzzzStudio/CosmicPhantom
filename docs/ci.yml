@@ -1,0 +1,38 @@
+# 启用方式（2026-11-19）：把本文件复制到 .github/workflows/ci.yml 并推送。
+# 注意：推送 GitHub Actions 工作流需要带 workflow scope 的凭据（当前 gh token 只有 repo），否则会被拒。
+# 本文件放在 docs/ 是为了让仓库本身可以被无 workflow scope 的凭据正常同步。
+
+name: ci
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [22]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+
+      # 测试脚本用 tools/node 便携运行时（仓库未跟踪），这里按 manifests 拉一次
+      - name: bootstrap portable runtimes
+        run: node bootstrap.cjs --all
+        continue-on-error: true
+
+      - name: install deps
+        run: npm ci --no-audit --no-fund
+
+      - name: tests
+        run: npm test
+
+      - name: sanitize (no personal paths / secrets)
+        run: node scripts/check-sanitize.cjs

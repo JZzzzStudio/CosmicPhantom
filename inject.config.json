@@ -1,0 +1,7 @@
+{
+  "identityCardBytes": 6000,
+  "recoveryBytes": 4500,
+  "memoryTop": 2,
+  "memoryBytes": 1200,
+  "warnAt": 0.9
+}

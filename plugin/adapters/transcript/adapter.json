@@ -1,0 +1,6 @@
+{
+  "id": "transcript",
+  "version": "1.0.0",
+  "kind": "transcript",
+  "description": "从 transcript 文件读取并标准化事件。"
+}

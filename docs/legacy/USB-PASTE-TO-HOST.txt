@@ -1,0 +1,5 @@
+ARCHIVED HOST HANDOFF NOTE
+
+This historical handoff script was tied to a private host configuration and is not a supported public installation method.
+
+Use the host-neutral configuration contract in docs/AGENT-CONFIG.md. Replace every local path and source directory with values belonging to the target instance, and review the resulting staged files before sharing them.

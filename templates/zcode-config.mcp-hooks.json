@@ -1,0 +1,97 @@
+{
+ "mcp": {
+  "servers": {
+   "prompts.chat": {
+    "url": "https://prompts.chat/api/mcp"
+   },
+   "cosmic-phantom": {
+    "type": "stdio",
+    "command": "<USER_HOME>/.cosmic-phantom/tools/node/node.exe",
+    "args": [
+     "<USER_HOME>/.cosmic-phantom/resources/mcp-server/index.js",
+     "--root",
+     "<USER_HOME>/.cosmic-phantom"
+    ],
+    "env": {
+     "CP_ROOT": "<USER_HOME>/.cosmic-phantom"
+    }
+   }
+  }
+ },
+ "hooks": {
+  "enabled": true,
+  "events": {
+   "SessionStart": [
+    {
+     "matcher": "compact",
+     "hooks": [
+      {
+       "type": "process",
+       "command": "<USER_HOME>/.cosmic-phantom/tools/node/node.exe",
+       "args": [
+        "<USER_HOME>/.cosmic-phantom/compaction-inject.cjs",
+        "--root",
+        "<USER_HOME>/.cosmic-phantom"
+       ],
+       "timeoutMs": 20000
+      }
+     ]
+    },
+    {
+     "hooks": [
+      {
+       "type": "process",
+       "command": "<NODE_BIN>",
+       "args": [
+        "<TEAM_STARTUP_SCRIPT>"
+       ],
+       "timeoutMs": 20000
+      }
+     ]
+    }
+   ],
+   "UserPromptSubmit": [
+    {
+     "hooks": [
+      {
+       "type": "process",
+       "command": "<USER_HOME>/.cosmic-phantom/tools/node/node.exe",
+       "args": [
+        "--experimental-sqlite",
+        "<USER_HOME>/.cosmic-phantom/flush-reminder.cjs",
+        "--root",
+        "<USER_HOME>/.cosmic-phantom"
+       ],
+       "timeoutMs": 20000
+      },
+      {
+       "type": "process",
+       "command": "<USER_HOME>/.cosmic-phantom/tools/node/node.exe",
+       "args": [
+        "<TASK_INTAKE_SCRIPT>"
+       ],
+       "timeoutMs": 20000
+      }
+     ]
+    }
+   ],
+   "Stop": [
+    {
+     "hooks": [
+      {
+       "type": "process",
+       "command": "<USER_HOME>/.cosmic-phantom/tools/node/node.exe",
+       "args": [
+        "--experimental-sqlite",
+        "<USER_HOME>/.cosmic-phantom/zcode-flush.cjs",
+        "--root",
+        "<USER_HOME>/.cosmic-phantom"
+       ],
+       "timeoutMs": 20000
+      }
+     ]
+    }
+   ]
+  }
+ }
+}
