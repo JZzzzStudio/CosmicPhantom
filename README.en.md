@@ -23,7 +23,7 @@ CP is under active development. The generic plugin P0 and isolated three-domain 
 Requirements: Node.js 22.5 or newer and Git.
 
 ```bash
-git clone https://github.com/JZzzzStudio/cosmic-phantom.git
+git clone https://github.com/JZzzzStudio/CosmicPhantom.git
 cd cosmic-phantom
 npm install
 node --experimental-sqlite memory-cli.js verify --root .

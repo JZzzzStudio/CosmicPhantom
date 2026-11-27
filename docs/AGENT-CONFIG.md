@@ -33,7 +33,7 @@ GPU 不是必须条件。模型、运行时和向量库可以缺失，但 `verif
 ### 2.1 获取引擎
 
 ```bash
-git clone https://github.com/<OWNER>/cosmic-phantom.git <CP_ENGINE>
+git clone https://github.com/<OWNER>/CosmicPhantom.git <CP_ENGINE>
 cd <CP_ENGINE>
 ```
 

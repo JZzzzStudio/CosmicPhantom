@@ -45,7 +45,7 @@ CP 的边界也很明确：它不是云端多租户平台，不把在线 LLM 摘
 前提：Node.js 22.5+、Git。GPU 不是必需条件；没有本地向量模型时仍可使用词法检索。
 
 ```bash
-git clone https://github.com/JZzzzStudio/cosmic-phantom.git cosmic-phantom
+git clone https://github.com/JZzzzStudio/CosmicPhantom.git CosmicPhantom
 cd cosmic-phantom
 npm install
 node --experimental-sqlite memory-cli.js verify --root .

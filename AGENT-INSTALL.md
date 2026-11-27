@@ -19,7 +19,7 @@ git --version         # 自备（tools/ 未入仓）
 ## 1. 取代码
 
 ```bash
-git clone https://github.com/<OWNER>/cosmic-phantom.git <CP_ENGINE>
+git clone https://github.com/<OWNER>/CosmicPhantom.git <CP_ENGINE>
 cd <CP_ENGINE>
 ```
 
