@@ -46,6 +46,7 @@ Unreviewed candidates are not part of the legacy default search or injection pat
 - [中文 README](README.md)
 - [Documentation index](docs/README.md)
 - [Architecture and invariants](docs/ARCHITECTURE.md)
+- [Product design and v1 acceptance](docs/PRODUCT-DESIGN.md)
 - [Agent configuration](docs/AGENT-CONFIG.md)
 - [Generic plugin package](docs/PLUGIN-PACKAGE.md)
 - [Evaluation methodology and limitations](eval/METRICS.md)

@@ -227,6 +227,7 @@ npm test
 | 目标 | 文档 |
 |---|---|
 | 数据模型和不变量 | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) |
+| 首版产品闭环和完成标准 | [`docs/PRODUCT-DESIGN.md`](docs/PRODUCT-DESIGN.md) |
 | 目录和联动关系 | [`DIRECTORY-MAP.md`](DIRECTORY-MAP.md) |
 | 宿主接入契约 | [`docs/AGENT-CONFIG.md`](docs/AGENT-CONFIG.md) |
 | 回复规则和项目护栏 | [`core/rules.md`](core/rules.md) |

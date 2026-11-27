@@ -8,6 +8,7 @@ CP 的公开文档按读者任务组织。首页先说明它解决的问题；�
 | 阅读英文简介和快速开始 | [README in English](../README.en.md) |
 | 把 CP 接到 Agent 环境或实例目录 | [接入与配置契约](AGENT-CONFIG.md) |
 | 理解事件、候选、活跃记忆和检索边界 | [架构与不变量](ARCHITECTURE.md) |
+| 阅读 CP 的首版产品闭环和完成标准 | [产品设计](PRODUCT-DESIGN.md) |
 | 打包、配置、启用或卸载通用插件 | [插件包说明](PLUGIN-PACKAGE.md) |
 | 使用统一术语 | [术语表](TERMINOLOGY.md) |
 | 查看固定题集、指标定义和已知局限 | [评测口径](../eval/METRICS.md) |
