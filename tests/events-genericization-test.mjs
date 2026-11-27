@@ -44,10 +44,10 @@ try {
   const daily = readFileSync(join(ROOT, "daily", "2026-11-26.md"), "utf8");
   check("explicit source_kind is displayed", daily.includes("通道：custom-channel"), daily);
   check("missing source_kind still displays raw instance", daily.includes("通道：mystery-source"), daily);
-  check("legacy zcode prefix remains compatible", daily.includes("通道：ZCode"), daily);
+  check("legacy zcode prefix remains compatible", daily.includes("通道：Legacy JSONL"), daily);
   check("legacy session prefix remains compatible", daily.includes("通道：SessionAdapter"), daily);
-  check("legacy proma prefix remains compatible", daily.includes("通道：Proma"), daily);
-  check("legacy workbuddy prefix remains compatible", daily.includes("通道：WorkBuddy"), daily);
+  check("legacy proma prefix remains compatible", daily.includes("通道：Legacy JSONL"), daily);
+  check("legacy workbuddy prefix remains compatible", daily.includes("通道：Legacy JSONL"), daily);
   check("filtered raw text is absent from projection", !daily.includes("Base directory for this skill"), daily);
   check("filtered session has no empty session block", !daily.includes("会话 filtered-session") && !daily.includes("会话 filtered"), daily);
 

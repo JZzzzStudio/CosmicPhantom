@@ -89,7 +89,7 @@ try {
   const logFile = path.join(ROOT, "hook-errors.log");
   const logBak = fs.existsSync(logFile) ? fs.readFileSync(logFile, "utf8") : null;
   const now = new Date().toISOString();
-  const fake = Array.from({ length: 12 }, (_, i) => `[${now}] zcode-flush: selftest failed status=1 注入${i}`).join("\n") + "\n";
+  const fake = Array.from({ length: 12 }, (_, i) => `[${now}] flush-hook: selftest failed status=1 注入${i}`).join("\n") + "\n";
   fs.appendFileSync(logFile, fake);
   cleanup(() => { if (logBak === null) fs.rmSync(logFile, { force: true }); else fs.writeFileSync(logFile, logBak); });
   check("F16 错误计数会响", staleWith(verify(), "hook-errors"));

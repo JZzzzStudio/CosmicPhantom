@@ -13,7 +13,7 @@
  *       第 6 步曾因新机无 git 整链中断,此处改为留痕降级)。
  *
  * 范围(用户拍板 B:内容层) memories/ core/ daily/ .context/ AGENTS.md current-state.json
- *   reply-policy.json —— 脚本/索引/派生层不看(行为由 hook-smoke/verify 兜底)。
+ *   reply-policy.json —— 脚本/索引/派生层不看(行为由 verify 兜底)。
  * 纪律:事件驱动(收尾/手动触发,禁常驻监听);hash 变才算变更(touch 不算);git 失败显式报不静默。
  *
  * 用法:

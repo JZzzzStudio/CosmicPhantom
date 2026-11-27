@@ -7,9 +7,8 @@ const APPLY = process.argv.includes('--apply');
 const CONFIRM = process.argv.includes('--confirm');
 
 const ENTITIES = [
-  'Proma', 'GitHub', 'cp-memory', 'Claude Code', 'ZCode', 'Breezell', 'WorkBuddy',
-  'Hermes', 'LoCoMo', 'LongMemEval', 'ONNX', 'MCP', 'SQLite', 'Windows', 'Node',
-  'Cosmic Phantom', 'CP', 'PROMA', 'AITEAM', 'Obsidian', 'Telegram', 'Feishu', '飞书',
+  'GitHub', 'cp-memory', 'LoCoMo', 'LongMemEval', 'ONNX', 'MCP', 'SQLite', 'Windows', 'Node',
+  'Cosmic Phantom', 'CP', 'Obsidian', 'Telegram', 'Feishu', '飞书',
 ];
 
 const files = listMemoryFiles('memories');

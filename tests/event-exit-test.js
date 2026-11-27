@@ -53,7 +53,7 @@ fs.writeFileSync(zp, [
   { sourceId: 'z-a', session: 's2', content: '重复 mid A', ts: '2026-01-01T00:00:00.000Z' },
   { sourceId: 'z-b', session: 's2', content: '重复 mid B', ts: '2026-01-01T00:00:01.000Z' },
 ].map(x => JSON.stringify(x)).join('\n') + '\n', 'utf8');
-run(['zcode', '--source', zp]);
+run(['jsonl', '--source', zp]);
 
 const duplicateMid = run(['redact', '--mid', '0', '--reason', '测试脱敏']);
 check('4b. 重复 mid 未指定 instance 时拒绝猜测', duplicateMid.refused === true, JSON.stringify(duplicateMid).slice(0, 160));

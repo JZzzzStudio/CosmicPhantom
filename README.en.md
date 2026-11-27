@@ -2,6 +2,10 @@
 
 **Long-term memory for AI agents that users can approve, trace, and correct.**
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE) [![Node ≥22.5](https://img.shields.io/badge/node-%E2%89%A522.5-339933?logo=node.js&logoColor=white)](https://nodejs.org)
+
+> Local-first, replayable, auditable memory engine for AI agents · universal agent plugin
+
 When work spans many sessions, people have to repeat decisions and correct stale assumptions. Cosmic Phantom (CP) is designed to make persistent memory accountable: proposed memories stay inactive until a user approves them, active memories retain source links, and corrections can be checked against prior versions.
 
 CP is a local-first engine for a single user. It is not a hosted multi-tenant service, and the repository does not include personal memory data.
@@ -24,7 +28,7 @@ Requirements: Node.js 22.5 or newer and Git.
 
 ```bash
 git clone https://github.com/JZzzzStudio/CosmicPhantom.git
-cd cosmic-phantom
+cd CosmicPhantom
 npm install
 node --experimental-sqlite memory-cli.js verify --root .
 ```

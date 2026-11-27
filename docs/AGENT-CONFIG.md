@@ -97,7 +97,6 @@ MCP 配置可参考 `templates/` 下与当前环境格式匹配的示例。所�
 | `CP_DATA_DIR` | 数据镜像仓位置 |
 | `CP_HOST` | 写入 `events.src_host` 的接入端标识；不等于权限系统 |
 | `CP_GIT` | 指定 Git 可执行文件；用于受限环境 |
-| `CP_ZCODE_DB` / `CP_PROMA_SESSIONS_DIR` / `CP_AITEAM_STATE_BUILDER` | 宿主适配器/钩子显式声明的来源路径（会话库、会话目录、面板构建脚本）；未声明则可见跳过，不隐式探测；也可经对应参数显式传入 |
 | `CP_USER_NAME` | 本机运行时的用户称呼，仅供 `ref-hunt` 生成 `person:` 候选；不应写入公共代码仓或共享配置 |
 | `sources.json` | 实例来源注册、启用状态和 coverage 参数 |
 | `hosts.json` | 实例接入端角色和规则挂载；不属于公共代码仓默认配置 |

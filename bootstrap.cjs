@@ -125,7 +125,7 @@ async function main() {
     say(`✓ 完成（${a.dest}）`);
   }
   say('\n全部处理完毕。');
-  if (skipped.length) { say('\n⚠️ 未完成/未校验项：'); for (const x of skipped) say('  - ' + x); say('  → hybrid 检索与 Proma hook 可能因此静默降级，见 docs/AGENT-CONFIG.md §2.2'); }
+  if (skipped.length) { say('\n⚠️ 未完成/未校验项：'); for (const x of skipped) say('  - ' + x); say('  → hybrid 检索与宿主 hook 可能因此静默降级，见 docs/AGENT-CONFIG.md §2.2'); }
 }
 
 main().catch((e) => fail(String(e && e.message || e)));

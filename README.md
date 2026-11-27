@@ -2,6 +2,10 @@
 
 **让 Agent 记住该记的，记错后真正改过来。**
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE) [![Node ≥22.5](https://img.shields.io/badge/node-%E2%89%A522.5-339933?logo=node.js&logoColor=white)](https://nodejs.org)
+
+> 本地优先、可回放、可审计的 AI Agent 记忆引擎 · 通用型 Agent 插件
+
 English: [README.en.md](README.en.md)
 
 长期使用 Agent 的人会反复遇到同一个问题：新会话要重新交代已经决定过的事；更糟的是，Agent 可能把一次临时说法、误解或过期决策带进下一次工作，用户只能反复纠正。CP 的目标不是让 Agent 无限制地多记，而是让长期记忆在生效前可确认、出错后可纠正，并验证旧内容不再继续误导。
@@ -46,7 +50,7 @@ CP 的边界也很明确：它不是云端多租户平台，不把在线 LLM 摘
 
 ```bash
 git clone https://github.com/JZzzzStudio/CosmicPhantom.git CosmicPhantom
-cd cosmic-phantom
+cd CosmicPhantom
 npm install
 node --experimental-sqlite memory-cli.js verify --root .
 ```
@@ -202,7 +206,6 @@ npm test
 - `lib/`：可复用的校验、同步和 fail-open 模块。
 - `resources/`：MCP 服务和资源入口。
 - `skills/`：核心技能真源。
-- `host-extensions/`：接入端扩展样例与公共协议适配。
 - `plugin/`：通用型 Agent 插件清单、启动器、配置状态和适配器契约；不含实例数据。
 - `scripts/packaging/`：当前插件打包和校验入口。
 - `scripts/legacy/`：历史脚本，只用于复现，不是当前入口。

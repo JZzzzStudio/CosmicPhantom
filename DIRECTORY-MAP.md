@@ -18,7 +18,6 @@
 | `docs/` | 档案/入口 | 当前架构、配置和使用说明；`legacy/` 是历史手册 | 代码契约和当前决策 | 用户、维护者、接入者 | 当前文档需可运行；历史文档隔离 |
 | `embedding-db/` | 派生 | 本地向量模型、词表和向量库 | `memories/`、模型 | 可选语义检索 | 可重建；缺失时降级 |
 | `eval/` | 评测 | 冻结题集、跑分器、指标和外部数据清单 | 记忆数据、参数、数据集 | 评测报告、质量闸 | 题集冻结；运行结果不入代码仓 |
-| `host-extensions/` | 引擎 | 接入端扩展样例和公共扩展契约 | CP API、宿主事件 | 当前接入端 | 当前实现；宿主版本需单独验证 |
 | `lib/` | 引擎 | 可复用的校验、同步和 fail-open 模块 | 根命令输入 | CLI、MCP、测试 | 当前实现 |
 | `plugin/` | 引擎 | 通用型 Agent 插件清单、启动器、配置状态和适配器契约 | 引擎代码、用户命令 | 插件生命周期、配置向导、打包器 | 可独立打包；不含实例数据 |
 | `schemas/` | 引擎 | 插件、实例和适配器契约 | 当前协议 | 校验器、打包器、测试 | 当前实现 |
@@ -102,14 +101,13 @@ reply-policy.json
 
 ### 接入、同步和运行配置
 
-`bootstrap.cjs`、`<host>-flush.cjs`、`<host>-hook-wrap.cjs`、`compaction-inject.cjs`、`cp-exec.cjs`、`cp-sync.cjs`、`flush-reminder.cjs`、`hook-smoke.cjs`、`mcp-smoke.cjs`、`precompact-probe.cjs`、`skill-log.cjs`、`skills-sync.js`、`sync-reply-policy.mjs`、`task-card-gate.cjs`、`plugin/launcher.cjs`、`scripts/packaging/check-plugin.cjs`、`scripts/packaging/pack-plugin.cjs`、`scripts/packaging/sync-plugin-engine.cjs`
+`bootstrap.cjs`、`compaction-inject.cjs`、`cp-exec.cjs`、`cp-sync.cjs`、`mcp-smoke.cjs`、`precompact-probe.cjs`、`skill-log.cjs`、`skills-sync.js`、`sync-reply-policy.mjs`、`task-card-gate.cjs`、`plugin/launcher.cjs`、`scripts/packaging/check-plugin.cjs`、`scripts/packaging/pack-plugin.cjs`、`scripts/packaging/sync-plugin-engine.cjs`
 
 ## 📦 当前低频入口与历史入口
 
 ### `scripts/packaging/`：当前安装和打包
 
 - `install-bundle.cjs`：继承包落地器，默认 dry-run，`--apply` 才写入。
-- `install-check.js`：按 `--engine` 或 `--instance` 检查引擎资产和实例身份。
 - `migrate-monthly.js`：一次性迁移旧单卡到月度分桶。
 - `pack-bundle.cjs`：私有继承/迁移工具，会读取本机宿主配置与广泛实例状态；不是通用插件打包器，通用打包用 `pack-plugin.cjs`。
 - `pack-<host>.cjs` / `install-<host>.cjs`：特定接入端的独立交付逻辑，不是 CP 核心真源；具体名称只在实现和历史档案中保留。
