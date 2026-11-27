@@ -5,8 +5,8 @@ const os = require("node:os");
 const path = require("node:path");
 const crypto = require("node:crypto");
 
-const REAL = path.join(os.homedir(), ".cosmic-phantom");
-const NODE = path.join(REAL, "tools", "node", "node.exe");
+const REAL = path.resolve(__dirname, "..");
+const NODE = process.execPath;
 const SCRIPT = path.join(REAL, "current-state.js");
 const MCP = path.join(REAL, "resources", "mcp-server", "index.js");
 const SB = fs.mkdtempSync(path.join(os.tmpdir(), "cp-continuity-"));
@@ -22,8 +22,7 @@ function run(args, options = {}) {
 function json(result) { return JSON.parse(result.out); }
 function sha(file) { return crypto.createHash("sha256").update(fs.readFileSync(file)).digest("hex"); }
 
-const prodState = path.join(REAL, "current-state.json");
-const prodBefore = fs.existsSync(prodState) ? sha(prodState) : null;
+const sourceBefore = sha(SCRIPT);
 
 console.log("=== Continuity state owner ===");
 let result = run(["show"]);
@@ -79,8 +78,8 @@ check("C9 MCP reads sandbox current state", mcp.stdout.includes(patch.objective)
 const mcpUpdated = JSON.parse(fs.readFileSync(path.join(SB, "current-state.json"), "utf8"));
 check("C10 MCP revision-checked update commits", mcp.stdout.includes("MCP handoff update") && mcpUpdated.revision === 2 && mcpUpdated.updatedBy === "mcp-test-agent", mcp.stdout.slice(-400));
 
-const prodAfter = fs.existsSync(prodState) ? sha(prodState) : null;
-check("C11 production current state is unchanged", prodBefore === prodAfter, `${prodBefore} -> ${prodAfter}`);
+const sourceAfter = sha(SCRIPT);
+check("C11 repository source remains unchanged", sourceBefore === sourceAfter, `${sourceBefore} -> ${sourceAfter}`);
 
 fs.rmSync(SB, { recursive: true, force: true });
 console.log(`\n===== continuity-test: ${pass} passed / ${fail} failed =====`);

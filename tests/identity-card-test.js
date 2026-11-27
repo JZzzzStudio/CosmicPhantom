@@ -3,9 +3,10 @@ const { spawnSync } = require("node:child_process");
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
+const { writePublicState, writePublicMemory, writePublicDaily } = require("./fixtures/public-fixtures.cjs");
 
-const REAL = path.join(os.homedir(), ".cosmic-phantom");
-const NODE = path.join(REAL, "tools", "node", "node.exe");
+const REAL = path.resolve(__dirname, "..");
+const NODE = process.execPath;
 const SB = fs.mkdtempSync(path.join(os.tmpdir(), "cp-identity-"));
 let pass = 0, fail = 0;
 function check(name, condition, detail = "") {
@@ -17,10 +18,12 @@ function copy(relative) {
   fs.mkdirSync(path.dirname(target), { recursive: true });
   fs.copyFileSync(path.join(REAL, relative), target);
 }
-for (const file of ["identity-card.js", "inject-config.js", "inject.config.json", "current-state.js", "current-state.json", "reply-policy.json", "MEMORY.md", "package.json"]) copy(file);
+for (const file of ["identity-card.js", "inject-config.js", "inject.config.json", "current-state.js", "reply-policy.json", "package.json"]) copy(file);
 fs.mkdirSync(path.join(SB, "daily"), { recursive: true });
 fs.mkdirSync(path.join(SB, "memories"), { recursive: true });
-fs.writeFileSync(path.join(SB, "daily", "2099-01-01.md"), "# 2099-01-01 工作日志\n\n## 会话 identity-test（2099-01-01T00:00:00.000Z）\n- 👤 用户：IDENTITY_DAILY_RAW_MUST_STAY_HIDDEN\n---\n", "utf8");
+writePublicState(SB);
+writePublicMemory(SB, "# Public synthetic profile\n\n已确认活跃记忆：IDENTITY_ACTIVE_MEMORY_VISIBLE\n");
+writePublicDaily(SB, "2099-01-01.md", "IDENTITY_DAILY_RAW_MUST_STAY_HIDDEN");
 fs.writeFileSync(path.join(SB, "memories", "20990101-0001.md"), "---\nid: 20990101-0001\ncreated: 2099-01-01T00:00:00+08:00\nstatus: 🟢当前\nscope: global\ntype: 偏好\n---\nIDENTITY_ACTIVE_MEMORY_VISIBLE\n", "utf8");
 
 const probe = path.join(SB, "probe.mjs");

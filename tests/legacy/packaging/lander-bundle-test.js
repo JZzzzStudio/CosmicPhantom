@@ -18,9 +18,8 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 
-const REAL = path.join(os.homedir(), '.cosmic-phantom');
-const NODE = path.join(REAL, 'tools', 'node', 'node.exe');
-const SRC_USER = path.basename(os.homedir());   // 源机用户名（用于“漏网残留”判据）
+const CANDIDATE = path.resolve(__dirname, '..', '..', '..');
+const NODE = process.execPath;
 const FAKE_SOURCE_KEY = ["sk", "FAKE", "NOT-A-REAL-KEY-000"].join("-");
 const FAKE_TARGET_KEY = ["sk", "TARGET-OWN", "xxxx"].join("-");
 
@@ -35,13 +34,79 @@ const check = (name, cond, detail) => {
   if (cond) { pass += 1; console.log(`  [PASS] ${name}`); }
   else { fail += 1; console.log(`  [FAIL] ${name} -- ${String(detail === undefined ? '' : detail).slice(0, 240)}`); }
 };
-const run = (args, opts = {}) => spawnSync(NODE, args, { encoding: 'utf8', timeout: 600000, ...opts });
 const rd = (f) => { try { return fs.readFileSync(f, 'utf8'); } catch { return null; } };
 const rj = (f) => { try { return JSON.parse(rd(f)); } catch { return null; } };
 
 const SB = fs.mkdtempSync(path.join(os.tmpdir(), 'cp-lander-'));
 process.on('exit', () => { try { fs.rmSync(SB, { recursive: true, force: true }); } catch {} });
+const ENGINE = path.join(SB, 'engine');
+const SRC_HOME = path.join(SB, 'source-home');
+const SRC_USER = path.basename(SRC_HOME);
+const SOURCE_ROOT = path.join(SRC_HOME, '.cosmic-phantom');
 const BUNDLE = path.join(SB, 'bundle');
+const TARGET_BASE = path.join(SB, 'targets');
+const copyTree = (src, dst, skip = () => false) => {
+  fs.mkdirSync(dst, { recursive: true });
+  for (const entry of fs.readdirSync(src, { withFileTypes: true })) {
+    if (skip(entry.name, entry, src)) continue;
+    const from = path.join(src, entry.name);
+    const to = path.join(dst, entry.name);
+    if (entry.isDirectory()) copyTree(from, to, skip);
+    else fs.copyFileSync(from, to);
+  }
+};
+const SKIP_ENGINE = new Set(['.git', 'node_modules', 'backup', 'delivery', 'docs', 'embedding-db', 'eval', 'tests']);
+copyTree(CANDIDATE, ENGINE, (name) => SKIP_ENGINE.has(name));
+fs.mkdirSync(path.join(ENGINE, 'tools', 'node'), { recursive: true });
+fs.copyFileSync(NODE, path.join(ENGINE, 'tools', 'node', 'node.exe'));
+fs.mkdirSync(path.join(SOURCE_ROOT, 'tools', 'node'), { recursive: true });
+fs.copyFileSync(NODE, path.join(SOURCE_ROOT, 'tools', 'node', 'node.exe'));
+
+const run = (args, opts = {}) => spawnSync(NODE, args, { encoding: 'utf8', timeout: 600000, ...opts });
+const runEngine = (script, args = [], opts = {}) => run(['--experimental-sqlite', path.join(ENGINE, script), ...args], {
+  ...opts,
+  env: { ...process.env, CP_ROOT: SOURCE_ROOT, CP_NODE: NODE, ...opts.env },
+});
+const engineScript = (rel) => path.join(ENGINE, rel);
+
+// ── 在隔离源实例中生成真实事件/投影和合法 P4 运行时 ─────────────────────
+console.log('=== 准备：构造隔离源实例 ===');
+for (const dir of ['memories', 'daily', 'distilled', 'backup', 'topics', 'core', '.context', 'lib', 'resources/mcp-server', 'scripts/legacy/hermes']) {
+  fs.mkdirSync(path.join(SOURCE_ROOT, dir), { recursive: true });
+}
+for (const rel of ['current-state.js', 'memory-cli.js', 'memory-retrieval.js', 'validate.js', 'events.js', 'inject.js', 'inject-config.js', 'inject.config.json', 'reply-policy.json', 'resume-context.js', 'link-graph.js', 'skills-sync.js', 'identity-card.js', 'resources/mcp-server/index.js', 'scripts/legacy/hermes/watch-state.js', 'lib/failopen.js', 'package.json', 'claude-flush.cjs', 'compaction-inject.cjs', 'flush-reminder.cjs', 'decision-cards.js', 'update-snapshot.js', 'sync-reply-policy.mjs', 'audit-due.cjs', 'session-adapter.js', 'mcp-smoke.cjs', 'hook-smoke.cjs']) {
+  const target = path.join(SOURCE_ROOT, rel);
+  fs.mkdirSync(path.dirname(target), { recursive: true });
+  fs.copyFileSync(engineScript(rel), target);
+}
+fs.copyFileSync(path.join(ENGINE, 'core', 'rules.md'), path.join(SOURCE_ROOT, 'core', 'rules.md'));
+fs.copyFileSync(path.join(ENGINE, 'core', 'reply-style.md'), path.join(SOURCE_ROOT, 'core', 'reply-style.md'));
+fs.writeFileSync(path.join(SOURCE_ROOT, '.context', 'CONTEXT.md'), '# Public synthetic context\n\n- Source instance is isolated for packaging tests.\n', 'utf8');
+fs.writeFileSync(path.join(SOURCE_ROOT, 'MEMORY.md'), '# Public synthetic memory index\n', 'utf8');
+fs.writeFileSync(path.join(SOURCE_ROOT, 'sources.json'), JSON.stringify({
+  schemaVersion: 1,
+  sources: [
+    { name: 'synthetic-source', kind: 'jsonl', dir: path.join(SRC_HOME, 'transcripts'), instancePrefix: 'synthetic-', enabled: true },
+    { name: 'manual', kind: 'session', dir: null, instancePrefix: 'manual-', enabled: true },
+  ],
+}, null, 2) + '\n', 'utf8');
+fs.mkdirSync(path.join(SRC_HOME, 'transcripts'), { recursive: true });
+fs.writeFileSync(path.join(SRC_HOME, 'transcripts', 'session.jsonl'), JSON.stringify({ type: 'user', message: { content: 'PUBLIC_SYNTHETIC_LANDER_EVENT' } }) + '\n', 'utf8');
+fs.writeFileSync(path.join(SOURCE_ROOT, 'current-state.json'), JSON.stringify({ schemaVersion: 1, revision: 1, updatedAt: '2099-01-01T00:00:00.000Z', updatedBy: 'lander-test', source: 'synthetic', status: 'active', objective: 'Public packaging fixture', summary: 'Synthetic source instance', completed: [], nextActions: ['Run isolated lander'], blockers: [], decisions: [], workingFiles: [], verification: [] }, null, 2) + '\n', 'utf8');
+fs.writeFileSync(path.join(SOURCE_ROOT, 'memories', '20990101-lander.md'), ['---', 'id: 20990101-lander', 'created: 2099-01-01T00:00:00.000Z', 'status: 🟢当前', 'type: 规则', 'tags: [synthetic, lander]', 'scope: global', '---', 'PUBLIC_SYNTHETIC_LANDER_MEMORY'].join('\n') + '\n', 'utf8');
+fs.writeFileSync(path.join(SOURCE_ROOT, 'index.json'), JSON.stringify({ schemaVersion: 1, entries: [] }, null, 2) + '\n', 'utf8');
+const transcript = path.join(SB, 'source-transcript.jsonl');
+fs.writeFileSync(transcript, JSON.stringify({ type: 'user', message: { content: [{ type: 'text', text: 'PUBLIC_SYNTHETIC_LANDER_EVENT' }] } }) + '\n', 'utf8');
+const ev = runEngine('events.js', ['manual', '--transcript', transcript, '--session', 'synthetic-lander', '--root', SOURCE_ROOT]);
+if (ev.status !== 0) { console.error('合成事件写入失败：\n' + String(ev.stdout || '') + String(ev.stderr || '')); process.exit(1); }
+const checkpoint = run(NODE === process.execPath ? [ '--experimental-sqlite', '-e', "const{DatabaseSync}=require('node:sqlite');const db=new DatabaseSync(process.argv[1]);db.exec('PRAGMA wal_checkpoint(TRUNCATE)');db.close();", path.join(SOURCE_ROOT, 'events.db')] : []);
+if (checkpoint.status !== 0) { console.error('events.db checkpoint 失败：\n' + String(checkpoint.stderr || '')); process.exit(1); }
+check('隔离源实例有非空 events.db', fs.existsSync(path.join(SOURCE_ROOT, 'events.db')) && fs.statSync(path.join(SOURCE_ROOT, 'events.db')).size > 0);
+check('隔离源实例有 daily 投影', fs.readdirSync(path.join(SOURCE_ROOT, 'daily')).some((name) => name.endsWith('.md')));
+const stats = runEngine('memory-cli.js', ['stats', '--root', SOURCE_ROOT]);
+const verify = runEngine('memory-cli.js', ['verify', '--root', SOURCE_ROOT]);
+check('隔离源实例 stats 有活跃记忆', stats.status === 0 && /total[^0-9]*[1-9]/.test(stats.stdout || ''), stats.stdout);
+check('隔离源实例 verify 可运行', verify.status === 0, verify.stderr || verify.stdout);
 
 // ── 打一个轻量测试包（假外部包 + --no-model，几秒完成）────────────────────
 console.log('=== 准备：打轻量测试包 ===');
@@ -51,45 +116,57 @@ for (const [id, files] of [['fake-client', ['Claude Code Haha.exe', 'resources/a
     fs.writeFileSync(path.join(SB, id, f), 'FAKE-' + id);
   }
 }
-// ⚠️ 安全：**必须用 --home 指向一个假 home**，否则 packer 会读真实 `~/.claude/cc-haha/providers.json`
-//   → **把真 API 密钥打进临时目录**。测试绝不该碰真密钥。
-const SRC_HOME = path.join(SB, 'src-home');
+// 安全边界：源机 home 也必须是 SB 内的合成目录；此处不读取 os.homedir() 或真实宿主配置。
 fs.mkdirSync(path.join(SRC_HOME, '.claude', 'cc-haha'), { recursive: true });
-// ⚠️ 教训（2026-09-19 实测踩到）：这三件是 **CP 自己的接入件**，必须**从真源拷**，不能造假 ——
-//   我一开始图省事写成 `{mcpServers:{}}`，把 CP 自己的 MCP 注册也"假掉"了 →
-//   落地器回读断言正确地报"注册里没有 cosmic-phantom" → **13 条测试假红**，看着像产品坏了。
-//   **脚手架造假也会把真依赖一起假掉**（与早先 setup.cjs 删自身目录那次同族）。
-const HOMEDIR = os.homedir();
-const HOMEDIR_FWD = HOMEDIR.replace(/\\/g, '/');
 const SRC_FWD = SRC_HOME.replace(/\\/g, '/');
-for (const rel of ['.claude.json', '.claude/settings.json', '.claude/CLAUDE.md']) {
-  try {
-    let t = fs.readFileSync(path.join(HOMEDIR, rel), 'utf8');
-    // ⚠️ 关键：packer 的占位符表 = `--home` 的取值（此处是 SRC_HOME）。
-    //   从真源拷来的文件里写的是**真实**家目录路径 → 不在占位符表里 → **不会被替换成 `<USER_HOME>`**
-    //   → payload 带着源机绝对路径旅行（实测表现为"MCP 注册指向源机 CP 根"）。
-    //   所以必须先把真路径改写成 SRC_HOME，占位符才生效。
-    t = t.split(HOMEDIR_FWD).join(SRC_FWD).split(HOMEDIR).join(SRC_HOME);
-    const dst = path.join(SRC_HOME, rel);
-    fs.mkdirSync(path.dirname(dst), { recursive: true });
-    fs.writeFileSync(dst, t);
-  } catch {}
-}
+const ROOT_FWD = SOURCE_ROOT.replace(/\\/g, '/');
+const sourceNode = path.join(SOURCE_ROOT, 'tools', 'node', 'node.exe');
+const sourceMcp = path.join(SOURCE_ROOT, 'resources', 'mcp-server', 'index.js');
+const sourceFlush = path.join(SOURCE_ROOT, 'claude-flush.cjs');
+const sourceMcpConfig = {
+  type: 'stdio',
+  command: sourceNode,
+  args: [sourceMcp, '--root', SOURCE_ROOT],
+  env: { CP_ROOT: SOURCE_ROOT },
+  disabled: false,
+};
+fs.writeFileSync(path.join(SRC_HOME, '.claude.json'), JSON.stringify({
+  userID: 'PUBLIC-SYNTHETIC-USER',
+  mcpServers: { 'cosmic-phantom': sourceMcpConfig },
+}, null, 2) + '\n', 'utf8');
+fs.writeFileSync(path.join(SRC_HOME, '.claude', 'settings.json'), JSON.stringify({
+  hooks: {
+    SessionStart: [{ hooks: [{ type: 'command', command: `"${sourceNode}" --experimental-sqlite "${path.join(SOURCE_ROOT, 'compaction-inject.cjs')}" --root "${SOURCE_ROOT}"` }] }],
+    UserPromptSubmit: [{ hooks: [{ type: 'command', command: `"${sourceNode}" --experimental-sqlite "${path.join(SOURCE_ROOT, 'flush-reminder.cjs')}" --root "${SOURCE_ROOT}"` }] }],
+    Stop: [{ hooks: [{ type: 'command', command: `"${sourceNode}" --experimental-sqlite "${sourceFlush}" --root "${SOURCE_ROOT}"` }] }],
+  },
+  syntheticSourceHome: SRC_USER,
+}, null, 2) + '\n', 'utf8');
+fs.writeFileSync(path.join(SRC_HOME, '.claude', 'CLAUDE.md'), [
+  '# Public synthetic Claude host',
+  '',
+  '<!-- snapshot-start -->',
+  `- source root: ${ROOT_FWD}`,
+  '<!-- snapshot-end -->',
+  '',
+].join('\n'), 'utf8');
 fs.writeFileSync(path.join(SRC_HOME, '.claude', 'cc-haha', 'providers.json'), JSON.stringify({
   schemaVersion: 5, activeId: 'FAKE-SRC', providers: [{ id: 'FAKE-SRC', name: 'fakeSrc', apiKey: FAKE_SOURCE_KEY, baseUrl: 'https://fake.invalid' }],
-}, null, 2));
-fs.writeFileSync(path.join(SRC_HOME, '.claude', 'cc-haha', 'settings.json'), JSON.stringify({ env: { ANTHROPIC_MODEL: 'fake-src-model' } }, null, 2));
+}, null, 2) + '\n', 'utf8');
+fs.writeFileSync(path.join(SRC_HOME, '.claude', 'cc-haha', 'settings.json'), JSON.stringify({ env: { ANTHROPIC_MODEL: 'fake-src-model' } }, null, 2) + '\n', 'utf8');
 
-const pk = run([path.join(REAL, 'scripts', 'packaging', 'pack-bundle.cjs'), '--out', BUNDLE, '--no-model', '--home', SRC_HOME,
-  '--client-src', path.join(SB, 'fake-client'), '--sts-src', path.join(SB, 'fake-sts')]);
+const pk = run([path.join(CANDIDATE, 'scripts', 'packaging', 'pack-bundle.cjs'), '--out', BUNDLE, '--no-model', '--home', SRC_HOME,
+  '--root', SOURCE_ROOT, '--client-src', path.join(SB, 'fake-client'), '--sts-src', path.join(SB, 'fake-sts')]);
 if (pk.status !== 0) { console.error('打包失败，无法继续：\n' + String(pk.stdout || '').slice(-400) + String(pk.stderr || '').slice(-400)); process.exit(1); }
 const man = rj(path.join(BUNDLE, 'MANIFEST.json'));
 check('打包成功且清单条数 == CHECKSUMS 行数',
   !!man && rd(path.join(BUNDLE, 'CHECKSUMS.sha256')).split('\n').filter(Boolean).length === man.checksumCount,
   man ? `声明 ${man.checksumCount}` : '无 MANIFEST');
 
-const install = (home, extra = []) => run([path.join(REAL, 'scripts', 'packaging', 'install-bundle.cjs'), '--bundle', BUNDLE,
-  '--home', home, '--root', path.join(home, '.cosmic-phantom'), '--apply', '--no-shortcuts', ...extra]);
+const install = (home, extra = []) => run([path.join(CANDIDATE, 'scripts', 'packaging', 'install-bundle.cjs'), '--bundle', BUNDLE,
+  '--home', home, '--root', path.join(home, '.cosmic-phantom'), '--client-dir', path.join(home, 'Claude Code Haha'), '--apply', '--no-shortcuts', ...extra], {
+  env: { ...process.env, CP_ROOT: path.join(home, '.cosmic-phantom'), CP_NODE: NODE },
+});
 
 const mkHome = (name) => { const h = path.join(SB, name); fs.mkdirSync(path.join(h, '.claude'), { recursive: true }); return h; };
 
@@ -104,8 +181,9 @@ console.log('\n=== A. 目标机已有自己的 hooks ===');
   fs.writeFileSync(path.join(H, '.claude', 'settings.json'), JSON.stringify({ userOwnTopKey: 'MUST-SURVIVE', hooks: userHooks }, null, 2));
   fs.writeFileSync(path.join(H, '.claude.json'), JSON.stringify({ userID: 'MUST-SURVIVE', mcpServers: { myOwn: { command: 'x' } } }, null, 2));
   const r = install(H);
+  if (r.status !== 4) fs.writeFileSync(path.join(os.tmpdir(), 'cp-install-a-out.json'), String(r.stdout || '') + '\n===STDERR===\n' + String(r.stderr || ''));
   const st = rj(path.join(H, '.claude', 'settings.json')) || {};
-  check('退出 4（包侧全通）', r.status === 4, `status=${r.status}`);
+  check('退出 4（包侧全通）', r.status === 4, `status=${r.status} out=${String(r.stdout || '').slice(-500)} err=${String(r.stderr || '').slice(-300)}`);
   check('用户原有的 SessionStart hook 存活', JSON.stringify(st.hooks && st.hooks.SessionStart || []).includes('USER-OWN-SESSIONSTART'));
   check('用户原有的 Stop hook 存活', JSON.stringify(st.hooks && st.hooks.Stop || []).includes('USER-OWN-STOP'));
   check('CP 的 hook 也装上了', JSON.stringify(st.hooks || {}).includes('claude-flush'));
@@ -130,7 +208,7 @@ console.log('\n=== B. 目标机已有自己的 CLAUDE.md ===');
   check('用户原句未被覆盖', md.includes('不要动我这条'));
   const r2 = install(H, ['--allow-claude-md-skip']);
   const rep = rj(path.join(BUNDLE, 'INSTALL-REPORT.json')) || {};
-  check('加 --allow-claude-md-skip 后 exit 4', r2.status === 4, `status=${r2.status}`);
+  check('加 --allow-claude-md-skip 后 exit 4', r2.status === 4, `status=${r2.status} out=${String(r2.stdout || '').slice(-500)} err=${String(r2.stderr || '').slice(-300)}`);
   check('但 verdict 必须带出"注入层未装"', /注入层未装/.test(String(rep.verdict || '')), String(rep.verdict || '').slice(0, 120));
   check('且 pending 里有这条', (rep.pending || []).some((x) => String(x).startsWith('注入层未装')));
 }
@@ -265,7 +343,8 @@ console.log('\n=== G. 未登记项挡板 ===');
   fs.writeFileSync(path.join(SRCH, '.claude', 'CLAUDE.md'), '# x\n');
   fs.writeFileSync(path.join(SRCH, '.claude', 'cc-haha', 'providers.json'), '{}');
   fs.writeFileSync(path.join(SRCH, '.claude', 'cc-haha', 'settings.json'), '{}');
-  const pkArgs = (out) => [path.join(REAL, 'scripts', 'packaging', 'pack-bundle.cjs'), '--out', path.join(SB, out), '--no-model', '--home', SRCH,
+  const pkArgs = (out) => [path.join(CANDIDATE, 'scripts', 'packaging', 'pack-bundle.cjs'), '--out', path.join(SB, out), '--no-model', '--home', SRCH,
+    '--root', SOURCE_ROOT,
     '--client-src', path.join(SB, 'fake-client'), '--sts-src', path.join(SB, 'fake-sts')];
 
   const ok = run(pkArgs('g-ok'));

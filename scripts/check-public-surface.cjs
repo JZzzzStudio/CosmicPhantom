@@ -35,7 +35,7 @@ const PUBLIC_FILES = [
 
 const PUBLIC_WORDING_FORBIDDEN = [
   { name: '具体宿主品牌', re: /\b(?:Proma|Hermes|ZCode|WorkBuddy|CodeBuddy|Breezell)\b/i },
-  { name: '宿主内部路径', re: /(?:~\/\.|(?:^|[ (])\/(?:Users|home)\/|[A-Z]:[\\/](?:Users|home|cp-lab|Proma)[\\/])/i },
+  { name: '宿主内部路径', re: /(?:~\/\.|(?:^|[ (])\/(?:Users|home)\/|[A-Z]:[\\/]+(?:Users|home|cp-lab|Proma)[\\/]+)/i },
   { name: '凭据或私有数据标记', re: /\b(?:ghp_[A-Za-z0-9]{20,}|gho_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|AKIA[0-9A-Z]{16})\b|cp-cindy-bridge|\.proma[\\/]/i },
   { name: '署名或品牌注入', re: /Made[- ]with\s*:/i },
 ];
@@ -44,7 +44,7 @@ const SENSITIVE = [
   // Detection regexes and synthetic test fixtures may contain marker strings by design.
 
   { name: 'credential-format', re: /-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----|\b(?:ghp_[A-Za-z0-9]{20,}|gho_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|AKIA[0-9A-Z]{16}|sk-[A-Za-z0-9_-]{20,})\b|\bBearer\s+[A-Za-z0-9._-]{20,}/i },
-  { name: 'private-machine-path', re: /(?:[A-Z]:[\\/](?:Users|home|AITEAM|AIGC|Proma|cp-lab|CC)[\\/][A-Za-z0-9._-]+|\/(?:Users|home)\/[A-Za-z0-9._-]+)/i },
+  { name: 'private-machine-path', re: /(?:[A-Z]:[\\/]+(?:Users|home|AITEAM|AIGC|Proma|cp-lab|CC)[\\/]+[A-Za-z0-9._-]+|\/(?:Users|home)\/[A-Za-z0-9._-]+)/i },
   { name: 'private-capture', re: /cp-cindy-bridge|raw-pages|host-responses|sessionUrl|capture-manifest/i },
   { name: 'private-source-marker', re: /<PROMA_SESSIONS_DIR>|个人原话|Z:[\\/]/i },
   { name: 'unresolved-asset-placeholder', re: /github\.com\/<OWNER>\/.*releases|sha256[^\n]{0,100}<填写|<填写后由/i },

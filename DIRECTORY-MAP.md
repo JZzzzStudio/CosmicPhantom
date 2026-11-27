@@ -111,7 +111,7 @@ reply-policy.json
 - `install-bundle.cjs`：继承包落地器，默认 dry-run，`--apply` 才写入。
 - `install-check.js`：按 `--engine` 或 `--instance` 检查引擎资产和实例身份。
 - `migrate-monthly.js`：一次性迁移旧单卡到月度分桶。
-- `pack-bundle.cjs`：生成可迁移的 CP 继承包。
+- `pack-bundle.cjs`：私有继承/迁移工具，会读取本机宿主配置与广泛实例状态；不是通用插件打包器，通用打包用 `pack-plugin.cjs`。
 - `pack-<host>.cjs` / `install-<host>.cjs`：特定接入端的独立交付逻辑，不是 CP 核心真源；具体名称只在实现和历史档案中保留。
 
 ### `scripts/legacy/`：历史复现

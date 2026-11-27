@@ -5,8 +5,8 @@ const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
 
-const REAL = path.join(os.homedir(), ".cosmic-phantom");
-const NODE = path.join(REAL, "tools", "node", "node.exe");
+const REAL = path.resolve(__dirname, "..");
+const NODE = process.execPath;
 const SB = fs.mkdtempSync(path.join(os.tmpdir(), "cp-zflush-test-"));
 const ROOT = path.join(SB, "root");
 const SOURCE_DB = path.join(SB, "zcode.sqlite");
@@ -41,7 +41,7 @@ function runFlush(root, dbPath, payload) {
     encoding: "utf8",
     timeout: 30000,
     input: JSON.stringify(payload),
-    env: { ...process.env, CP_NODE: NODE },
+    env: { ...process.env, CP_NODE: NODE, HOME: SB, USERPROFILE: SB, CP_SKIP_DECISION_CARDS: "1", CP_SKIP_STOP_CHECKS: "1" },
   });
 }
 
@@ -124,6 +124,15 @@ try {
   result = runFlush(EMPTY_ROOT, path.join(SB, "missing.sqlite"), { sessionId: "sess-main", turnId: "turn-current" });
   check("ZF16 missing source DB fails open", result.status === 0 && result.stdout === "{}", `${result.status} ${result.stdout} ${result.stderr}`);
   check("ZF17 missing source DB creates no events.db", !fs.existsSync(path.join(EMPTY_ROOT, "events.db")), "events.db unexpectedly created");
+  const undeclared = spawnSync(NODE, ["--experimental-sqlite", path.join(EMPTY_ROOT, "zcode-flush.cjs"), "--root", EMPTY_ROOT], {
+    encoding: "utf8",
+    timeout: 30000,
+    input: JSON.stringify({ sessionId: "sess-main", turnId: "turn-current" }),
+    env: { ...process.env, CP_NODE: NODE, HOME: SB, USERPROFILE: SB, CP_ZCODE_DB: "", CP_SKIP_DECISION_CARDS: "1", CP_SKIP_STOP_CHECKS: "1" },
+  });
+  const undeclaredJson = JSON.parse(undeclared.stdout);
+  check("ZF19 undeclared source is visible", undeclared.status === 0 && undeclaredJson.skipped === true && /CP_ZCODE_DB/.test(undeclaredJson.error || ""), undeclared.stdout);
+  check("ZF20 undeclared source creates no events.db", !fs.existsSync(path.join(EMPTY_ROOT, "events.db")));
 } finally {
   fs.rmSync(SB, { recursive: true, force: true });
   check("ZF18 sandbox cleaned", !fs.existsSync(SB), SB);

@@ -5,9 +5,10 @@ const { spawnSync } = require("node:child_process");
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
+const { writePublicState, writePublicMemory, writePublicContext, writePublicCore } = require("./fixtures/public-fixtures.cjs");
 
-const REAL = path.join(os.homedir(), ".cosmic-phantom");
-const NODE = path.join(REAL, "tools", "node", "node.exe");
+const REAL = path.resolve(__dirname, "..");
+const NODE = process.execPath;
 const SB = fs.mkdtempSync(path.join(os.tmpdir(), "cp-fp-"));
 let pass = 0, fail = 0;
 function check(name, condition, detail = "") {
@@ -20,7 +21,11 @@ function copy(relative) {
   fs.mkdirSync(path.dirname(target), { recursive: true });
   fs.copyFileSync(path.join(REAL, relative), target);
 }
-for (const f of ["resume-context.js", "current-state.js", "current-state.json", "reply-policy.json", "inject.config.json"]) copy(f);
+for (const f of ["resume-context.js", "current-state.js", "reply-policy.json", "inject.config.json", "package.json"]) copy(f);
+writePublicState(SB);
+writePublicMemory(SB);
+writePublicContext(SB);
+writePublicCore(SB);
 fs.mkdirSync(path.join(SB, "memories"), { recursive: true });
 
 const CARD = (id, body) => [

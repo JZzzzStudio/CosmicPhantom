@@ -7,8 +7,8 @@ const os = require("node:os");
 const path = require("node:path");
 const { pathToFileURL } = require("node:url");
 
-const REAL = path.join(os.homedir(), ".cosmic-phantom");
-const NODE = path.join(REAL, "tools", "node", "node.exe");
+const REAL = path.resolve(__dirname, "..");
+const NODE = process.execPath;
 const SB = fs.mkdtempSync(path.join(os.tmpdir(), "cp-hybrid-"));
 const ROOT = path.join(SB, "root");
 const MEM = path.join(ROOT, "memories");
@@ -31,7 +31,9 @@ function run(script, args) {
   try {
     for (const dir of [MEM, path.join(ROOT, "daily"), path.join(ROOT, "distilled"), path.join(ROOT, "embedding-db", "models")]) fs.mkdirSync(dir, { recursive: true });
     for (const file of ["embed-tokenizer.js", "embed.js", "memory-retrieval.js", "memory-cli.js", "skills-sync.js", "link-graph.js", "package.json", "lib/failopen.js"]) copy(file);
-    fs.copyFileSync(path.join(REAL, "embedding-db", "models", "vocab.txt"), path.join(ROOT, "embedding-db", "models", "vocab.txt"));
+    const vocabFixture = ["[PAD]", "[UNK]", "[CLS]", "[SEP]", "你", "好", "world", "u", "##na", "##ff", "##able", "qq", "##qq", "##zz"];
+    while (vocabFixture.length < 21128) vocabFixture.push(`[unused${vocabFixture.length}]`);
+    fs.writeFileSync(path.join(ROOT, "embedding-db", "models", "vocab.txt"), vocabFixture.join("\n") + "\n", "utf8");
     fs.writeFileSync(path.join(ROOT, ".watch-paused"), "test\n");
 
     // ---- HT1 分词器（真实 vocab.txt）----
@@ -89,9 +91,9 @@ function run(script, args) {
     // ---- HT7 真实模型 e2e（模型存在才跑；缺失=环境豁免）----
     // 注意：对真源生产资产直接跑（只读 query），沙箱根无模型；
     // 2026-08-13 曾误用沙箱根导致永远拿 error 对象（判定条件查真源、执行却指沙箱，已修）。
-    if (fs.existsSync(path.join(REAL, "embedding-db", "models", "model.onnx"))) {
+    if (fs.existsSync(path.join(ROOT, "embedding-db", "models", "model.onnx"))) {
       console.log("=== 真实模型 e2e ===");
-      const query = (text) => spawnSync(NODE, [path.join(REAL, "embed.js"), "query", text, "--root", REAL], { encoding: "utf8", timeout: 60000 });
+      const query = (text) => spawnSync(NODE, [path.join(ROOT, "embed.js"), "query", text, "--root", ROOT], { encoding: "utf8", timeout: 60000 });
       const q1 = query("测试文本甲");
       const q2 = query("测试文本甲");
       const v1 = JSON.parse(q1.stdout), v2 = JSON.parse(q2.stdout);

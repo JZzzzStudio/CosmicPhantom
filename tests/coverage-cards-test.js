@@ -30,10 +30,11 @@ function writeCard(file, text) {
 try {
   fs.mkdirSync(path.join(TMP, "daily"), { recursive: true });
   fs.mkdirSync(path.join(TMP, "memories"), { recursive: true });
+  const fixtureDate = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
   const lines = Array.from({ length: 5 }, (_, i) => `- **⭐👤 用户（决策）**：决定第 ${i} 条：做某件重要的事`).join("\n");
-  fs.writeFileSync(path.join(TMP, "daily", "2026-10-28.md"), lines + "\n", "utf8");
+  fs.writeFileSync(path.join(TMP, "daily", `${fixtureDate}.md`), lines + "\n", "utf8");
 
-  writeCard("2026-10.md", "决定第 0 条：做某件重要的事");
+  writeCard(`${fixtureDate.slice(0, 7)}.md`, "决定第 0 条：做某件重要的事");
   let r = run(TMP);
   check("T1 部分覆盖", r.decisions === 5 && r.covered === 1 && r.rate === 0.2, JSON.stringify(r));
 

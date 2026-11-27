@@ -20,7 +20,7 @@ function arg(name) {
 }
 
 const ROOT = arg("--root") || join(homedir(), ".cosmic-phantom");
-const ZCODE_DB = arg("--zcode-db") || process.env.CP_ZCODE_DB || join(homedir(), ".zcode", "cli", "db", "db.sqlite");
+const ZCODE_DB = arg("--zcode-db") || process.env.CP_ZCODE_DB || "";
 const NODE = process.env.CP_NODE || join(ROOT, "tools", "node", "node.exe");
 const LOG = join(ROOT, "hook-errors.log");
 
@@ -152,8 +152,14 @@ function main() {
   const payload = readStdin();
   const sessionId = payload.sessionId || payload.session_id || process.env.ZCODE_SESSION_ID || process.env.CLAUDE_SESSION_ID;
   const turnId = payload.turnId || payload.turn_id || null;
+  if (!ZCODE_DB) {
+    logErr("ZCode source undeclared: pass --zcode-db or set CP_ZCODE_DB; flush skipped");
+    process.stdout.write(JSON.stringify({ source: "zcode", error: "ZCode source undeclared (--zcode-db / CP_ZCODE_DB)", skipped: true }));
+    return;
+  }
   if (!sessionId || !existsSync(ZCODE_DB)) {
     if (!sessionId) logErr("Stop payload has no session ID");
+    if (sessionId && !existsSync(ZCODE_DB)) logErr(`ZCode database missing: ${ZCODE_DB}`);
     process.stdout.write("{}");
     return;
   }
@@ -219,8 +225,8 @@ function main() {
   // AITEAM 面板数据保鲜(2026-08-29 用户指令"实时更新"):每轮回复结束从真实数据源重建
   //   team-state.json(前端 poll 5s 轮询,数据一变 5 秒内上屏)。fail-open,不阻塞收尾链。
   try {
-    const builder = join("D:", "AITEAM", "panel", "state-builder.cjs");
-    if (existsSync(builder)) spawnSync(NODE, ["--experimental-sqlite", builder], { encoding: "utf8", timeout: 20000 });
+    const builder = process.env.CP_AITEAM_STATE_BUILDER || "";
+    if (builder && existsSync(builder)) spawnSync(NODE, ["--experimental-sqlite", builder], { encoding: "utf8", timeout: 20000 });
   } catch (e) {
     logErr(`state-builder sync failed: ${e.message}`);
   }

@@ -1,11 +1,11 @@
 // tests/retrieval-golden-test.js - shared TF/BM25 ranking golden set.
-const { spawnSync, execFileSync } = require("node:child_process");
+const { spawnSync } = require("node:child_process");
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
 
-const REAL = path.join(os.homedir(), ".cosmic-phantom");
-const NODE = path.join(REAL, "tools", "node", "node.exe");
+const REAL = path.resolve(__dirname, "..");
+const NODE = process.execPath;
 const SB = fs.mkdtempSync(path.join(os.tmpdir(), "cp-retrieval-"));
 const ROOT = path.join(SB, "root");
 const MEM = path.join(ROOT, "memories");
@@ -48,10 +48,12 @@ try {
   for (const dir of [MEM, path.join(ROOT, "daily"), path.join(ROOT, "backup"), path.join(ROOT, "distilled"), path.join(ROOT, "resources", "mcp-server")]) fs.mkdirSync(dir, { recursive: true });
   for (const file of [
     "memory-retrieval.js", "memory-cli.js", "skills-sync.js", "link-graph.js", "inject.js", "identity-card.js", "inject-config.js", "inject.config.json",
-    "current-state.js", "current-state.json", "reply-policy.json", "resume-context.js", "resume-manifest.json", "MEMORY.md",
+    "current-state.js", "reply-policy.json", "resume-context.js",
     "events.js", "validate.js", "log_turn.js", "package.json", "resources/mcp-server/index.js", "lib/failopen.js",
   ]) copy(file);
-  execFileSync("cmd", ["/c", "mklink", "/J", path.join(ROOT, "tools"), path.join(REAL, "tools")], { stdio: "ignore" });
+  const { writePublicState, writePublicMemory } = require("./fixtures/public-fixtures.cjs");
+  writePublicState(ROOT);
+  writePublicMemory(ROOT);
   fs.writeFileSync(path.join(ROOT, ".watch-paused"), "test\n");
   fs.writeFileSync(path.join(ROOT, "state-db-path.txt"), "# deprecated test\n");
 

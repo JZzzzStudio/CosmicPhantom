@@ -106,6 +106,102 @@ const VALID_STATUS = ["🟢当前", "🔜计划", "🕰️过去"];
 const VALID_TYPES = ["偏好", "事件", "规则", "procedural", "constraint"];
 const SNIPPET_BYTES = 800;  // 2026-08-11 优化：预览级信息 800B 足够判断，全文在文件可读；原 2048×5 每次检索约 10KB 属浪费
 
+// 宿主健康检查必须显式声明路径；缺少配置时不探测用户目录或安装目录。
+const HOST_CHECKS_PATH = process.env.CP_HOST_CHECKS ? resolve(process.env.CP_HOST_CHECKS) : join(ROOT, "host-checks.json");
+function loadHostChecks() {
+  const requested = Boolean(process.env.CP_HOST_CHECKS);
+  if (!existsSync(HOST_CHECKS_PATH)) {
+    return requested
+      ? { configured: true, configDir: dirname(HOST_CHECKS_PATH), error: `host-checks.json 不存在: ${HOST_CHECKS_PATH}` }
+      : { configured: false, configDir: dirname(HOST_CHECKS_PATH), data: {} };
+  }
+  try {
+    const data = JSON.parse(readFileSync(HOST_CHECKS_PATH, "utf8").replace(/^\uFEFF/, ""));
+    if (!data || Array.isArray(data) || typeof data !== "object") throw new Error("必须是 JSON 对象");
+    return { configured: true, configDir: dirname(HOST_CHECKS_PATH), data };
+  } catch (error) {
+    return { configured: true, configDir: dirname(HOST_CHECKS_PATH), error: `host-checks.json 无法解析: ${error.message}` };
+  }
+}
+function validateHostChecks(config) {
+  const errors = config.error ? [config.error] : [];
+  const data = config.data || {};
+  const pathValue = (label, value, baseDir = config.configDir) => {
+    if (value === undefined) return;
+    if (typeof value !== "string" || !value.trim()) {
+      errors.push(`${label} 必须是非空路径`);
+      return;
+    }
+    const file = resolve(baseDir, value.trim());
+    if (!existsSync(file)) errors.push(`${label} 不存在: ${file}`);
+  };
+  const pathSetting = (envName, configuredValue) => process.env[envName] === undefined
+    ? { value: configuredValue, baseDir: config.configDir }
+    : { value: process.env[envName], baseDir: process.cwd() };
+  const checkPathSetting = (label, envName, configuredValue) => {
+    const setting = pathSetting(envName, configuredValue);
+    pathValue(label, setting.value, setting.baseDir);
+  };
+  const objectValue = (label, value) => {
+    if (value !== undefined && (!value || typeof value !== "object" || Array.isArray(value))) errors.push(`${label} 必须是 JSON 对象`);
+    return value && typeof value === "object" && !Array.isArray(value) ? value : {};
+  };
+  const hook = objectValue("hook", data.hook);
+  checkPathSetting("hook.logDir", "CP_HOOK_LOG_DIR", hook.logDir);
+  checkPathSetting("hook.configPath", "CP_HOOK_CONFIG", hook.configPath);
+  const transcript = objectValue("transcript", data.transcript);
+  checkPathSetting("transcript.projectsDir", "CP_CC_PROJECTS", transcript.projectsDir);
+  const skillMounts = objectValue("skillMounts", data.skillMounts);
+  checkPathSetting("skillMounts.home", "CP_SKILL_HOME", skillMounts.home);
+  const injection = objectValue("injection", data.injection);
+  checkPathSetting("injection.userFile", "CP_INJECTION_USER_FILE", injection.userFile);
+  if (data.replyPolicyTargets !== undefined && !Array.isArray(data.replyPolicyTargets)) {
+    errors.push("replyPolicyTargets 必须是数组");
+  } else {
+    for (const [index, item] of (data.replyPolicyTargets || []).entries()) {
+      if (!item || typeof item !== "object" || Array.isArray(item)) {
+        errors.push(`replyPolicyTargets[${index}] 必须是 JSON 对象`);
+        continue;
+      }
+      pathValue(`replyPolicyTargets[${index}].path`, item.path === undefined ? "" : item.path);
+    }
+  }
+  if (process.env.CP_REPLY_POLICY_FILE !== undefined) {
+    pathValue("CP_REPLY_POLICY_FILE", process.env.CP_REPLY_POLICY_FILE, process.cwd());
+  }
+  return errors;
+}
+const HOST_CHECKS = (() => {
+  const loaded = loadHostChecks();
+  const errors = validateHostChecks(loaded);
+  return { ...loaded, errors, error: errors[0] || null };
+})();
+function explicitHostPath(value, baseDir = HOST_CHECKS.configDir) {
+  if (typeof value !== "string" || !value.trim()) return null;
+  return resolve(baseDir, value.trim());
+}
+function envOrConfiguredPath(envName, configuredValue) {
+  if (process.env[envName] !== undefined) {
+    const value = String(process.env[envName]).trim();
+    return value ? resolve(value) : null;
+  }
+  return explicitHostPath(configuredValue);
+}
+function replyPolicyTargets() {
+  const targets = [];
+  const configured = Array.isArray(HOST_CHECKS.data?.replyPolicyTargets) ? HOST_CHECKS.data.replyPolicyTargets : [];
+  for (const item of configured) {
+    const file = explicitHostPath(item?.path);
+    if (file) targets.push({ host: String(item.name || "configured host"), file });
+  }
+  const envFile = envOrConfiguredPath("CP_REPLY_POLICY_FILE", undefined);
+  if (envFile) targets.push({ host: process.env.CP_REPLY_POLICY_NAME || "configured host", file: envFile });
+  return targets;
+}
+function explicitUserInjectionPath() {
+  return envOrConfiguredPath("CP_INJECTION_USER_FILE", HOST_CHECKS.data?.injection?.userFile);
+}
+
 // ---------- 工具 ----------
 const normalize = normalizeText;
 const listMd = listMemoryFiles;
@@ -959,6 +1055,7 @@ function cmdVerify() {
   const drift = idxCount >= 0 && idxCount !== entries.length;
   // 新鲜度（§8.1 #3：守护死亡可感知——写强制停摆时 verify 必须显式暴露）
   const stale = [];
+  for (const error of HOST_CHECKS.errors || []) stale.push(`宿主检查配置错误：${error}`);
   try {
     if (existsSync(DAILY_DIR)) {
       const dfs = readdirSync(DAILY_DIR).filter(f => /^\d{4}-\d{2}-\d{2}\.md$/.test(f)).sort();
@@ -1003,39 +1100,32 @@ function cmdVerify() {
         stale.push(`AGENTS.md 快照 revision ${snapRev[1]} ≠ 状态 ${st.revision}（收尾漏跑 update-snapshot.js）`);
       }
     }
-    // hook 健康（F7 防静默崩溃，2026-08-17）：ZCode 日志近 2 天 hook.run.failed → 显式暴露
-    //   （08-12 事故：Stop hook 崩 6 天无感知；静态检查只保"装好那一刻"，运行退化靠这里兜底）
-    //   只统计 config.json 修改时间之后的失败：修复配置后旧失败不再持续报噪（防 F7 自身成为噪音源）
-    const zlogDir = join(homedir(), ".zcode", "cli", "log");
-    const cfgPath = join(homedir(), ".zcode", "cli", "config.json");
-    const cfgMtime = existsSync(cfgPath) ? statSync(cfgPath).mtimeMs : 0;
-    const today = new Date();
-    let hookFails = 0, hookDay = "";
-    for (const off of [0, 1]) {
-      const d = new Date(today.getTime() - off * 86400000);
-      const tag = d.toISOString().slice(0, 10);
-      const zl = join(zlogDir, `zcode-${tag}.jsonl`);
-      if (!existsSync(zl)) continue;
-      for (const ln of readFileSync(zl, "utf8").split("\n")) {
-        if (!ln.includes('"event":"hook.run.failed"')) continue;
-        const m = ln.match(/"timestamp":"([^"]+)"/);
-        if (m && Date.parse(m[1]) <= cfgMtime) continue; // 配置修复前的旧失败，不算新问题
-        if (m && Date.now() - Date.parse(m[1]) > 2 * 86400000) continue; // 过期窗口 2026-08-17：超 48h 的失败自动退场（旧配置残留期失败不再永久挂 stale；fail-open 仍守住当前窗口）
-        hookFails++; hookDay = tag;
+    // F7：只检查显式声明的接入端日志；没有路径就不探测宿主目录。
+    const hookLogDir = envOrConfiguredPath("CP_HOOK_LOG_DIR", HOST_CHECKS.data?.hook?.logDir);
+    const hookConfigPath = envOrConfiguredPath("CP_HOOK_CONFIG", HOST_CHECKS.data?.hook?.configPath);
+    if (hookLogDir) {
+      const configMtime = hookConfigPath && existsSync(hookConfigPath) ? statSync(hookConfigPath).mtimeMs : 0;
+      const today = new Date();
+      let hookFails = 0, hookDay = "";
+      for (const off of [0, 1]) {
+        const d = new Date(today.getTime() - off * 86400000);
+        const tag = d.toISOString().slice(0, 10);
+        const logFile = join(hookLogDir, `hook-${tag}.jsonl`);
+        if (!existsSync(logFile)) continue;
+        for (const ln of readFileSync(logFile, "utf8").split("\n")) {
+          if (!ln.includes('"event":"hook.run.failed"')) continue;
+          const m = ln.match(/"timestamp":"([^"]+)"/);
+          if (m && Date.parse(m[1]) <= configMtime) continue;
+          if (m && Date.now() - Date.parse(m[1]) > 2 * 86400000) continue;
+          hookFails++; hookDay = tag;
+        }
       }
+      if (hookFails > 0) stale.push(`hook.run.failed ×${hookFails}（${hookDay}；配置修改后仍有失败，请检查接入端 hook）`);
     }
-    if (hookFails > 0) stale.push(`ZCode hook.run.failed ×${hookFails}（${hookDay}；config.json 修改后仍有失败，跑 hook-smoke.cjs --deep 排查）`);
-    // hook 健康 —— Claude Code 分支（F7 扩展，2026-09-15 主宿主化时补；此前 F7 只覆盖 ZCode，主宿主裸奔）
-    //   思路与 ZCode 分支不同：Claude Code 侧 hook-errors.log 混杂诊断行(如 mcp:)与测试痕迹，
-    //   按行数统计噪音大；改为「新鲜度对比」——transcript 更新了但 daily 没跟上 = Stop hook 静默失败。
-    //   不查 events.db 的原因：node:sqlite 需 --experimental-sqlite 标志，verify 调用时未必携带。
-    //   不误报前提（**2026-09-16 更正**）：原注释写"用户不说话时两边都不更新，差值恒定"——**该前提错误**，
-    //     实测误报 588 分钟：用户离开 9.8 小时后回来发一句，UserPromptSubmit 立刻 touch transcript，
-    //     而 daily 要等本轮 Stop hook 才更新 → 这段空档必然被算成"Stop hook 静默失败"。
-    //   正确判据：**要求空档"已凝固"** —— 只有当 transcript 自身也已经 30 分钟没动（本轮已结束/会话静默）
-    //     却仍比 daily 新时，才可能是 Stop 真没跑。回合进行中（transcript 刚被 touch）一律不报。
+    // F7：显式声明的会话来源目录比 daily 新且已静默，才提示接入端可能漏跑 Stop hook。
+    //   回合进行中 transcript 刚更新时不报，避免把正常延迟误判成故障。
     try {
-      const ccProj = process.env.CP_CC_PROJECTS || join(homedir(), ".claude", "projects");   // env 覆盖：供 guard-selftest 构造可控故障态（2026-09-16）
+      const ccProj = envOrConfiguredPath("CP_CC_PROJECTS", HOST_CHECKS.data?.transcript?.projectsDir);
       let newest = 0;
       if (existsSync(ccProj)) {
         for (const d of readdirSync(ccProj)) {
@@ -1055,15 +1145,18 @@ function cmdVerify() {
         const F7_IDLE_MIN = Number(process.env.CP_F7_IDLE_MIN || 30);
         if (dayM > 0 && idleMin > F7_IDLE_MIN) {
           const lagMin = Math.round((newest - dayM) / 60000);
-          if (lagMin > 30) stale.push(`Claude Code Stop hook 可能静默失败：transcript 比 daily 新 ${lagMin} 分钟且已静默 ${idleMin} 分钟（手动跑 claude-flush.cjs 补落 / 查 hook-errors.log）`);
+          if (lagMin > 30) stale.push(`Stop hook 可能静默失败：transcript 比 daily 新 ${lagMin} 分钟且已静默 ${idleMin} 分钟（检查显式声明的接入端 hook）`);
         }
       }
     } catch { /* fail-open */ }
     // skill 挂载位一致性（F8 防同步失真，2026-08-17）：08-13 事故——daily 声称"已同步且 diff 一致"，
     //   但挂载位副本 mtime 证实从未落盘，宿主长期停留旧版（30 天蒸馏间隔）无人察觉、两次被用户抓包。
     //   这里对每个有挂载的宿主逐一 diff 真源 skills/*/SKILL.md，缺/不一致显式暴露。
-    for (const r of checkSkillSync(ROOT, homedir())) {
-      if (!r.ok) stale.push(`挂载位 ${r.host}/skills/${r.skill} ${r.detail}`);
+    const skillHome = envOrConfiguredPath("CP_SKILL_HOME", HOST_CHECKS.data?.skillMounts?.home);
+    if (skillHome) {
+      for (const r of checkSkillSync(ROOT, skillHome)) {
+        if (!r.ok) stale.push(`挂载位 ${r.mount}/skills/${r.skill} ${r.detail}`);
+      }
     }
     // 语义索引新鲜度（F9 2026-08-17）：embedding-db/vectors.json 是 embed.js build 的派生索引，
     //   不在收尾链时可能静默过期（08-16 构建后新条目不在向量里，纯 BM25 不受影响但 hybrid 检索缺新条目）。
@@ -1179,7 +1272,7 @@ function cmdVerify() {
         stale.push(`压缩恢复健康门红（${detail}；跑 node resume-context.js refresh --root <根> 重戳）`);
       }
     } catch {}
-    // cp-autopilot 停跑守卫（F26 2026-09-28，挑刺 R6 转化）：扩展每次加载写 .flags/cp-autopilot.log，
+    // 接入端自动扩展停跑守卫（F26）：扩展每次加载写 .flags/cp-autopilot.log，
     //   最后一条 module evaluated 超 48h = 自动层疑似停跑（升级覆盖/目录丢失/语法错）——静默失效必须暴露。
     try {
       const apl = join(ROOT, ".flags", "cp-autopilot.log");
@@ -1188,7 +1281,7 @@ function cmdVerify() {
         const mm = lastEvt.match(/^\[([^\]]+)\]/);
         if (mm) {
           const ageH = (Date.now() - Date.parse(mm[1])) / 3600000;
-          if (ageH > 48) stale.push(`cp-autopilot 已 ${Math.floor(ageH)}h 未见加载（>48h，自动层疑似停跑；查 ~/.proma/sdk-config/extensions/cp-autopilot.mjs 与 .flags/cp-autopilot.log）`);
+          if (ageH > 48) stale.push(`接入端自动扩展已 ${Math.floor(ageH)}h 未见加载（>48h，自动层疑似停跑；检查已声明的扩展文件与 .flags/cp-autopilot.log）`);
         }
       }
     } catch {}
@@ -1365,14 +1458,13 @@ function cmdVerify() {
   //   无预算意识会持续膨胀每个会话的固定成本；>20KB 显式提示精简。
   let injections = { agentsWs: 0, agentsUser: 0, replyPolicy: 0, total: 0 };
   try {
-    for (const [k, p] of [["agentsWs", join(ROOT, "AGENTS.md")], ["agentsUser", join(homedir(), ".zcode", "AGENTS.md")], ["replyPolicy", join(ROOT, "reply-policy.json")]]) {
-      if (existsSync(p)) injections[k] = statSync(p).size;
+    const userInjection = explicitUserInjectionPath();
+    for (const [k, p] of [["agentsWs", join(ROOT, "AGENTS.md")], ["agentsUser", userInjection], ["replyPolicy", join(ROOT, "reply-policy.json")]]) {
+      if (p && existsSync(p)) injections[k] = statSync(p).size;
     }
     injections.total = injections.agentsWs + injections.agentsUser + injections.replyPolicy;
-    if (injections.total > 20000) stale.push(`注入体积 ${(injections.total / 1024).toFixed(1)}KB（AGENTS.md 工作区+用户级+门禁）——考虑精简，每个会话固定成本随体积增长`);
-    // 用户级注入软上限（2026-09-01 优化 #4，注入层纪律）：agentsUser 曾膨胀至 20KB 触发 08-29 瘦身，
-    //   无独立守卫则膨胀重演无感知；>12KB 显式暴露（软上限，不阻断）。
-    if (injections.agentsUser > 12000) stale.push(`AGENTS.md 用户级注入 ${(injections.agentsUser / 1024).toFixed(1)}KB（>12KB 软上限，08-29 瘦身前 20KB 教训）——精简或下沉 daily/pro 档案`);
+    if (injections.total > 20000) stale.push(`注入体积 ${(injections.total / 1024).toFixed(1)}KB（工作区+显式用户级+门禁）——考虑精简，每个会话固定成本随体积增长`);
+    if (injections.agentsUser > 12000) stale.push(`显式用户级注入 ${(injections.agentsUser / 1024).toFixed(1)}KB（>12KB 软上限）——精简或下沉 daily/pro 档案`);
   } catch {}
   // 吸收台账（ADR-001 层1，2026-08-12）：调 events.js coverage，显式暴露源缺口
   let absorption;
@@ -1404,18 +1496,16 @@ function cmdVerify() {
       }
     }
   } catch { /* fail-open */ }
-  // F20 门禁派生物一致性守卫(2026-08-29 reverse-skill 经验:单源 reply-policy.json → AGENTS.md 生成段漂移即报)
-  //   2026-09-27 扩展:目标列表改读 hosts.json 全部 agentFile(此前硬编码仅 ZCode——9-15 多宿主化/9-27 Proma 接入后同步扩了、守卫没扩,I-009)
+  // F20 门禁派生物一致性守卫：单源 reply-policy.json → 显式声明的接入端文件。
   try {
     const pol = JSON.parse(readFileSync(join(ROOT, "reply-policy.json"), "utf8"));
-    let targets = [];
-    try {
-      const hosts = JSON.parse(readFileSync(join(ROOT, "hosts.json"), "utf8").replace(/^\uFEFF/, "")).hosts || [];
-      targets = hosts.filter((h) => h.agentFile && h.role !== "retired").map((h) => ({ host: h.name, file: join(homedir(), h.agentFile) }));
-    } catch { targets = [{ host: "ZCode", file: join(homedir(), ".zcode", "AGENTS.md") }]; }
+    const targets = replyPolicyTargets();
+    if (HOST_CHECKS.configured && targets.length === 0) {
+      stale.push("⚠️ [F20] 未配置门禁派生目标，门禁一致性检查已跳过");
+    }
     const fbLine = "**禁用词（出现即违规）**：" + (pol.forbidden || []).join(" / ");
     for (const t of targets) {
-      if (!existsSync(t.file)) continue; // 未接入宿主跳过(与 sync-reply-policy 的 skipped 口径一致)
+      if (!existsSync(t.file)) { stale.push(`⚠️ [F20] ${t.host} 门禁文件不存在: ${t.file}`); continue; }
       const ag = readFileSync(t.file, "utf8");
       const seg = ag.slice(ag.indexOf("<!-- reply-policy:start"), ag.indexOf("<!-- reply-policy:end -->"));
       if (!seg.includes("reply-policy:start")) stale.push(`⚠️ [F20] ${t.host} 门禁段标记缺失(应跑 sync-reply-policy 重建派生物)`);
@@ -1576,75 +1666,6 @@ function cmdVerify() {
     });
     if (badEpi.length) stale.push(`[F34] ${badEpi.length} 条推断/自评类条目被标为🟢当前（${badEpi.slice(0, 3).map((e) => (e.meta || {}).id).join(",")}）——降为⏳待验证或补证据后改 fact`);
   } catch {}
-  // F33 宿主接线（2026-11-18）：CP 在 Proma 上是否真的“调用得到”
-  try {
-    const PROMA = join(homedir(), ".proma");
-    const resDir = join(process.env.LOCALAPPDATA || join(homedir(), "AppData", "Local"), "Programs", "Proma", "resources");
-    const asar = join(resDir, "app.asar");
-    if (existsSync(join(PROMA, "agent-workspaces")) && existsSync(asar)) {
-      // (a) asar 补丁标记（按 size+mtime 缓存，避免每轮扫 172MB）
-      const st2 = statSync(asar);
-      const cachePath = join(ROOT, ".flags", "f33-asar.json");
-      let patched = null;
-      try {
-        const c = JSON.parse(readFileSync(cachePath, "utf8"));
-        if (c.size === st2.size && c.mtimeMs === st2.mtimeMs) patched = c.patched;
-      } catch {}
-      if (patched === null) {
-        patched = false;
-        try {
-          const needle = "CP-PATCH 2026-11-18";
-          const all = readFileSync(asar);
-          patched = all.indexOf(needle) >= 0;
-        } catch {}
-        try { mkdirSync(join(ROOT, ".flags"), { recursive: true }); writeFileSync(cachePath, JSON.stringify({ size: st2.size, mtimeMs: st2.mtimeMs, patched }), "utf8"); } catch {}
-      }
-      if (!patched) stale.push("[F33] Proma app.asar 无 CP 补丁 → 4 个 hook 扩展不会加载（Proma 补丁不随引擎仓分发，按宿主版本另行部署）");
-      // (b) 扩展文件
-      const EXT = join(PROMA, "sdk-config", "extensions");
-      const needExt = ["cp-autopilot.mjs", "reply-guard.mjs", "sts-guard.mjs", "thinking-sanitizer.mjs"];
-      const missExt = needExt.filter((f) => !existsSync(join(EXT, f)));
-      if (missExt.length) stale.push(`[F33] 宿主扩展缺失 ${missExt.join(",")}（sdk-config/extensions/）`);
-      // (c) 扩展日志新鲜度（仅当 asar 已补丁才要求）
-      if (patched) {
-        for (const lf of ["reply-guard.module.log", "cp-autopilot.log"]) {
-          const p2 = join(ROOT, ".flags", lf);
-          if (!existsSync(p2)) { stale.push(`[F33] ${lf} 不存在——扩展未加载或未触发`); continue; }
-          const age = (Date.now() - statSync(p2).mtimeMs) / 86400000;
-          if (age > 7) stale.push(`[F33] ${lf} ${age.toFixed(1)} 天未更新（扩展可能已停）`);
-        }
-      }
-      // (d)(e) MCP 注册 + 技能挂载（任何启用 cosmic-phantom 的工作区；技能只在 CP 项目根工作区要求）
-      const wsRoot = join(PROMA, "agent-workspaces");
-      const cpSkills = readdirSync(join(ROOT, "skills")).filter((d) => existsSync(join(ROOT, "skills", d, "SKILL.md")));
-      let wsMeta = {};
-      try {
-        const list = JSON.parse(readFileSync(join(PROMA, "agent-workspaces.json"), "utf8"));
-        for (const w of (list.workspaces || [])) {
-          const root = String(w.projectRootPath || "").replace(/\\/g, "/").toLowerCase();
-          wsMeta[w.slug || w.id] = root;
-        }
-      } catch {}
-      const normRoot = ROOT.replace(/\\/g, "/").toLowerCase();
-      let mcpOk = false;
-      const skillNote = [];
-      for (const ws of readdirSync(wsRoot)) {
-        const mp = join(wsRoot, ws, "mcp.json");
-        if (!existsSync(mp)) continue;
-        let cfg = null;
-        try { cfg = JSON.parse(readFileSync(mp, "utf8")); } catch {}
-        const srv = cfg && cfg.servers && cfg.servers["cosmic-phantom"];
-        if (!srv || srv.enabled === false) continue;
-        mcpOk = true;
-        const isCpRoot = (wsMeta[ws] || "") === normRoot;
-        if (!isCpRoot) continue;
-        const mounted = cpSkills.filter((s) => existsSync(join(wsRoot, ws, "skills", s, "SKILL.md")));
-        if (mounted.length < cpSkills.length) skillNote.push(`${ws}:${mounted.length}/${cpSkills.length}`);
-      }
-      if (!mcpOk) stale.push("[F33] 没有任何 Proma 工作区启用 cosmic-phantom MCP（CP 工具调用不到）");
-      if (skillNote.length) stale.push(`[F33] 技能挂载不全 ${skillNote.join(" ")}（对照 ROOT/skills 复制）`);
-    }
-  } catch (e) { stale.push("⚠️ [F33] 接线检查自身失败: " + (e.message || "").slice(0, 60)); }
   // F53 语义邻接守卫（2026-11-18）：边太稀 → 扩散等于空转；孤立太多 → 图退化成点集。
   let graphInfo = null;
   try {
@@ -2322,28 +2343,51 @@ function cmdStats() {
 //   recall = 无查询实测（门禁+状态+术语+最近工作，即新会话开场注入的主体）；AGENTS 注入 = statSync（与 verify 同源）。
 function cmdQuota() {
   const pct = (b, c) => (c > 0 ? +(b / c * 100).toFixed(1) : 0);
-  const rep = spawnSync(NODE_BIN, [join(ROOT, "inject.js"), "--report", "--root", ROOT], { encoding: "utf8", timeout: 30000 });
-  let identityCard = { bytes: 0, budget: 0, util: 0 }, recoveryInject = { bytes: 0, budget: 0, util: 0 }, memoryBudget = 0;
   const configErrors = [];
+  const measurementErrors = [];
+  const commandFailure = (label, result) => {
+    const detail = String(result?.error?.message || result?.stderr || "").trim().replace(/\s+/g, " ").slice(0, 240);
+    return `${label} 失败${result?.status == null ? "（未启动）" : `（退出码 ${result.status}）`}${detail ? `: ${detail}` : ""}`;
+  };
+  const rep = spawnSync(NODE_BIN, [join(ENGINE_ROOT, "inject.js"), "--report", "--root", ROOT], { encoding: "utf8", timeout: 30000 });
+  let identityCard = { bytes: null, budget: null, util: null, warn: false }, recoveryInject = { bytes: null, budget: null, util: null, warn: false }, memoryBudget = null;
   try {
+    if (rep.status !== 0 || rep.error) throw new Error(commandFailure("inject --report", rep));
     const j = JSON.parse((rep.stdout || "").trim());
+    if (!j.identityCard || !j.recovery || !j.memory || !Number.isFinite(j.identityCard.bytes) || !Number.isFinite(j.identityCard.budget) || !Number.isFinite(j.recovery.bytes) || !Number.isFinite(j.recovery.budget) || !Number.isFinite(j.memory.budget)) throw new Error("缺少完整预算字段");
     identityCard = { bytes: j.identityCard.bytes, budget: j.identityCard.budget, util: pct(j.identityCard.bytes, j.identityCard.budget), warn: !!j.identityCard.warn };
     recoveryInject = { bytes: j.recovery.bytes, budget: j.recovery.budget, util: pct(j.recovery.bytes, j.recovery.budget), warn: !!j.recovery.warn };
     memoryBudget = j.memory.budget;
     if ((j.configErrors || []).length) configErrors.push(...j.configErrors);
-  } catch { configErrors.push("inject --report 输出不可解析"); }
+  } catch (error) {
+    measurementErrors.push(`${commandFailure("inject --report", rep)}: ${error.message}`);
+  }
   const hook = spawnSync(NODE_BIN, [join(ENGINE_ROOT, "resume-context.js"), "render", "--root", ROOT], { encoding: "utf8", timeout: 30000 });
-  const recoveryHook = { bytes: Buffer.byteLength(hook.stdout || ""), budget: recoveryInject.budget, util: pct(Buffer.byteLength(hook.stdout || ""), recoveryInject.budget) };
+  let recoveryHook = { bytes: null, budget: recoveryInject.budget, util: null };
+  if (hook.status === 0 && hook.error == null && typeof hook.stdout === "string") {
+    const bytes = Buffer.byteLength(hook.stdout);
+    recoveryHook = { bytes, budget: recoveryInject.budget, util: recoveryInject.budget == null ? null : pct(bytes, recoveryInject.budget) };
+  } else measurementErrors.push(commandFailure("resume-context render", hook));
   const rec = spawnSync(NODE_BIN, [join(ENGINE_ROOT, "memory-cli.js"), "recall", "--bytes", "5000", "--root", ROOT], { encoding: "utf8", timeout: 30000 });
-  let recall = { bytes: 0, budget: 5000, util: 0, truncated: false };
-  try { const j = JSON.parse((rec.stdout || "").trim()); recall = { bytes: j.bytes, budget: j.budget, util: pct(j.bytes, j.budget), truncated: !!j.truncated }; } catch {}
-  const injections = { agentsWs: 0, agentsUser: 0, replyPolicy: 0, total: 0 };
+  let recall = { bytes: null, budget: null, util: null, truncated: false };
   try {
-    for (const [k, p] of [["agentsWs", join(ROOT, "AGENTS.md")], ["agentsUser", join(homedir(), ".zcode", "AGENTS.md")], ["replyPolicy", join(ROOT, "reply-policy.json")]]) {
-      if (existsSync(p)) injections[k] = statSync(p).size;
+    if (rec.status !== 0 || rec.error) throw new Error(commandFailure("memory-cli recall", rec));
+    const j = JSON.parse((rec.stdout || "").trim());
+    if (!Number.isFinite(j.bytes) || !Number.isFinite(j.budget)) throw new Error("缺少 bytes/budget 字段");
+    recall = { bytes: j.bytes, budget: j.budget, util: pct(j.bytes, j.budget), truncated: !!j.truncated };
+  } catch (error) {
+    measurementErrors.push(`${commandFailure("memory-cli recall", rec)}: ${error.message}`);
+  }
+  const injections = { agentsWs: 0, agentsUser: 0, replyPolicy: 0, total: 0 };
+  const hostConfigErrors = HOST_CHECKS.errors || [];
+  try {
+    const userInjection = explicitUserInjectionPath();
+    for (const [k, p] of [["agentsWs", join(ROOT, "AGENTS.md")], ["agentsUser", userInjection], ["replyPolicy", join(ROOT, "reply-policy.json")]]) {
+      if (p && existsSync(p)) injections[k] = statSync(p).size;
     }
     injections.total = injections.agentsWs + injections.agentsUser + injections.replyPolicy;
   } catch {}
+
   let contextDays = null;
   try { contextDays = +((Date.now() - statSync(join(ROOT, ".context", "CONTEXT.md")).mtimeMs) / 86400000).toFixed(1); } catch {}
   const warnings = [];
@@ -2353,7 +2397,7 @@ function cmdQuota() {
   if (recall.truncated || recall.util > 90) warnings.push("recall 开场注入接近/已达预算");
   if (injections.agentsUser > 12000) warnings.push("agentsUser 超 12KB 软上限");
   if (injections.total > 20000) warnings.push("注入总量超 20KB");
-  out({ identityCard, recoveryInject, recoveryHook, recall, memorySegmentBudget: memoryBudget, injections, context: { daysSinceWrite: contextDays, staleAtDays: 5 }, configErrors, warnings, note: "口径统一：胶囊双通道均读 inject.config.json recoveryBytes；warn 线 90%。recall 口径 = 新会话开场注入主体（无查询实测）" });
+  out({ ok: measurementErrors.length === 0, identityCard, recoveryInject, recoveryHook, recall, memorySegmentBudget: memoryBudget, injections, context: { daysSinceWrite: contextDays, staleAtDays: 5 }, configErrors: [...configErrors, ...hostConfigErrors], measurementErrors, warnings, note: "口径统一：胶囊双通道均读 inject.config.json recoveryBytes；宿主路径只来自显式配置；warn 线 90%。recall 口径 = 新会话开场注入主体（无查询实测）；测量失败不会以 0 计入。" });
 }
 
 function cmdImport(fromDir) {

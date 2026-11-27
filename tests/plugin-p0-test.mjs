@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import assert from "node:assert/strict";
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, rmSync, readdirSync, cpSync, renameSync } from "node:fs";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
@@ -47,6 +47,41 @@ try {
   check("plugin manifest passes validation", checked.status === 0 && cj.ok === true);
   const packed = runAt(PACK, ["--source", join(ROOT, "plugin"), "--out", PACKAGE], OUTSIDE_CWD); const pj = lastJson(packed);
   check("plugin package builds from outside the repository", packed.status === 0 && pj.ok === true && existsSync(join(PACKAGE, "checksums.json")));
+  console.log("=== content boundary (C 组) ===");
+  const BOUNDARY_SOURCE = join(TMP, "boundary-source");
+  const BOUNDARY_OUT = join(TMP, "boundary-out");
+  const boundarySkeleton = () => {
+    rmSync(BOUNDARY_SOURCE, { recursive: true, force: true });
+    mkdirSync(join(BOUNDARY_SOURCE, "engine"), { recursive: true });
+    writeFileSync(join(BOUNDARY_SOURCE, "plugin.json"), JSON.stringify({ schemaVersion: 1, id: "boundary-synthetic", displayName: "Boundary Synthetic", kind: "generic-agent-plugin", version: "1.0.0", entrypoint: "launcher.cjs", engineRoot: "engine", commands: ["configure"] }));
+    writeFileSync(join(BOUNDARY_SOURCE, "launcher.cjs"), "module.exports = {};\n");
+    writeFileSync(join(BOUNDARY_SOURCE, "engine", "engine.js"), "export const ok = true;\n");
+  };
+  const boundaryCases = [
+    ["events.db", "events.db", "x"],
+    ["instance directory", "memories/card.md", "x"],
+    ["daily projection", "daily/2026-01-01.md", "x"],
+    ["host config", "host-checks.json", "{}"],
+    ["dotenv", ".env", "A=1"],
+    ["secret filename", "my-secret.json", "{}"],
+    ["runtime lock", ".cp-projection.lock", "1"],
+    ["failopen stats", "failopen-stats.json", "{}"],
+    ["credential literal", "engine/config.js", 'export const apiKey = "sk-live-abcdef123456";\n'],
+    ["user home path", "engine/paths.js", 'export const home = "' + ["C:", "Users", "synthetic-user", ".cosmic-phantom"].join("\\") + '";\n'],
+  ];
+  for (const [name, relative, content] of boundaryCases) {
+    boundarySkeleton();
+    const target = join(BOUNDARY_SOURCE, relative);
+    mkdirSync(dirname(target), { recursive: true });
+    writeFileSync(target, content);
+    const direct = run(CHECK, [BOUNDARY_SOURCE]);
+    check(`content boundary rejects ${name} via check-plugin`, direct.status !== 0 && lastJson(direct).ok === false);
+    const packedBoundary = runAt(PACK, ["--source", BOUNDARY_SOURCE, "--out", BOUNDARY_OUT], OUTSIDE_CWD);
+    check(`content boundary rejects ${name} via pack-plugin`, packedBoundary.status !== 0);
+  }
+  boundarySkeleton();
+  const cleanCheck = run(CHECK, [BOUNDARY_SOURCE]);
+  check("content boundary allows a clean synthetic package", cleanCheck.status === 0 && lastJson(cleanCheck).ok === true);
   cpSync(join(ROOT, "plugin"), SOURCE_COPY, { recursive: true });
   const samePathPack = runAt(PACK, ["--source", SOURCE_COPY, "--out", SOURCE_COPY], OUTSIDE_CWD);
   const parentPathPack = runAt(PACK, ["--source", SOURCE_COPY, "--out", TMP], OUTSIDE_CWD);

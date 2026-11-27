@@ -7,22 +7,43 @@
  * 覆盖：F13 黄金集回退 / F14 待验证堆积 / F15 状态 TTL / F16 错误计数。
  * 污染控制（T7）：全部注入物带 20990101 测试前缀/标记行，finally 强制清理；跑前后 events 计数不变（本测试不写 events）。
  */
+const crypto = require("node:crypto");
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
 const { spawnSync } = require("node:child_process");
+const { writePublicState, writePublicMemory, writePublicContext, writePublicCore, writePublicDaily } = require("./fixtures/public-fixtures.cjs");
 
-const REAL = path.join(os.homedir(), ".cosmic-phantom");
-const NODE = path.join(REAL, "tools", "node", "node.exe");
+const REAL = path.resolve(__dirname, "..");
+const NODE = process.execPath;
+const SB = fs.mkdtempSync(path.join(os.tmpdir(), "cp-guard-selftest-"));
+const ROOT = path.join(SB, "root");
 let pass = 0, fail = 0;
 const cleanups = [];
+for (const dir of ["memories", "daily", "backup", "core", ".context", ".flags", "eval", "lib", "tools/node"]) fs.mkdirSync(path.join(ROOT, dir), { recursive: true });
+for (const file of ["memory-cli.js", "memory-retrieval.js", "validate.js", "link-graph.js", "skills-sync.js", "current-state.js", "resume-context.js", "reply-policy.json", "inject.config.json", "package.json", "lib/failopen.js"]) {
+  const target = path.join(ROOT, file);
+  fs.mkdirSync(path.dirname(target), { recursive: true });
+  fs.copyFileSync(path.join(REAL, file), target);
+}
+fs.copyFileSync(process.execPath, path.join(ROOT, "tools", "node", "node.exe"));
+writePublicState(ROOT);
+writePublicMemory(ROOT);
+writePublicContext(ROOT);
+writePublicCore(ROOT);
+fs.writeFileSync(path.join(ROOT, "core", "blindspot-ledger.md"), "# Public synthetic blindspot ledger\n\n| ID | 假设 | 来源 | 状态 | 证据 |\n|---|---|---|---|---|\n", "utf8");
+writePublicDaily(ROOT, "2099-01-01.md", "PUBLIC_GUARD_BASELINE");
+const manifestFiles = ["core/rules.md", "core/reply-style.md", "reply-policy.json", ".context/CONTEXT.md", "MEMORY.md"];
+const sources = Object.fromEntries(manifestFiles.map((file) => [file, crypto.createHash("sha256").update(fs.readFileSync(path.join(ROOT, file))).digest("hex")]));
+fs.writeFileSync(path.join(ROOT, "resume-manifest.json"), JSON.stringify({ schemaVersion: 1, policyRevision: 2, stateFile: "current-state.json", policyFile: "reply-policy.json", sources, status: "fresh" }, null, 2));
+fs.writeFileSync(path.join(ROOT, "eval", "last-result.json"), JSON.stringify({ summary: { recallAtK: 1, failList: [], irrelevantRate: 0 } }, null, 2));
 
 function check(name, cond, detail = "") {
   if (cond) { pass += 1; console.log(`  [PASS] ${name}`); }
   else { fail += 1; console.log(`  [FAIL] ${name} -- ${detail}`); }
 }
 function verify() {
-  const r = spawnSync(NODE, [path.join(REAL, "memory-cli.js"), "verify", "--root", REAL], { encoding: "utf8", timeout: 60000 });
+  const r = spawnSync(NODE, [path.join(ROOT, "memory-cli.js"), "verify", "--root", ROOT], { encoding: "utf8", timeout: 60000, env: { ...process.env, CP_ROOT: ROOT } });
   try { return JSON.parse(r.stdout || "{}"); } catch { return { stale: [], note: "verify 输出不可解析" }; }
 }
 function staleWith(v, kw) { return (v.stale || []).some(x => x.includes(kw)); }
@@ -33,24 +54,24 @@ try {
   const BEFORE_STALE = new Set((verify().stale || []));
 
   // ---- F13 黄金集回退：伪造 last-result 坏基线 → 应报"黄金集回退" ----
-  const lrFile = path.join(REAL, "eval", "last-result.json");
+  const lrFile = path.join(ROOT, "eval", "last-result.json");
   const lrBak = fs.existsSync(lrFile) ? fs.readFileSync(lrFile, "utf8") : null;
-  if (lrBak === null) fs.mkdirSync(path.join(REAL, "eval"), { recursive: true });
+  if (lrBak === null) fs.mkdirSync(path.join(ROOT, "eval"), { recursive: true });
   fs.writeFileSync(lrFile, JSON.stringify({ summary: { recallAtK: 0.5, failList: ["G-SELFTEST"], irrelevantRate: 0 } }, null, 2));
   cleanup(() => { if (lrBak === null) fs.rmSync(lrFile, { force: true }); else fs.writeFileSync(lrFile, lrBak); });
   check("F13 黄金集回退会响", staleWith(verify(), "黄金集回退"));
   if (lrBak === null) fs.rmSync(lrFile, { force: true }); else fs.writeFileSync(lrFile, lrBak);
 
   // ---- F14 待验证堆积：造最老 >7 天的 ⏳ 卡 → 应报"待验证池" ----
-  const pendFile = path.join(REAL, "memories", "20990101-9801.md");
+  const pendFile = path.join(ROOT, "memories", "20990101-9801.md");
   fs.writeFileSync(pendFile, ["---", "id: 20990101-9801", "created: 2026-08-01T00:00:00+08:00", "status: ⏳待验证", "type: 事件", "tags: [自检]", "scope: global", "---", "F14 自检卡（跑完即删）。"].join("\n"));
   cleanup(() => fs.rmSync(pendFile, { force: true }));
   check("F14 待验证堆积会响", staleWith(verify(), "待验证池"));
   fs.rmSync(pendFile, { force: true });
 
   // ---- F15 状态 TTL：伪造 40 天前时间戳 → 应报"TTL 过期" ----
-  const tsFile = path.join(REAL, "state-timestamps.json");
-  const st = JSON.parse(fs.readFileSync(path.join(REAL, "current-state.json"), "utf8"));
+  const tsFile = path.join(ROOT, "state-timestamps.json");
+  const st = JSON.parse(fs.readFileSync(path.join(ROOT, "current-state.json"), "utf8"));
   const item = (st.nextActions || [])[0];
   if (item) {
     const tsBak = fs.existsSync(tsFile) ? fs.readFileSync(tsFile, "utf8") : null;
@@ -65,7 +86,7 @@ try {
   } else check("F15 状态 TTL 会响", false, "current-state 无 nextActions 可测");
 
   // ---- F16 错误计数：注入 12 条假错误行 → 应报"hook-errors" ----
-  const logFile = path.join(REAL, "hook-errors.log");
+  const logFile = path.join(ROOT, "hook-errors.log");
   const logBak = fs.existsSync(logFile) ? fs.readFileSync(logFile, "utf8") : null;
   const now = new Date().toISOString();
   const fake = Array.from({ length: 12 }, (_, i) => `[${now}] zcode-flush: selftest failed status=1 注入${i}`).join("\n") + "\n";
@@ -76,7 +97,7 @@ try {
 
   // ---- F11 领域语言新鲜度（2026-09-01 A4 固化）：CONTEXT.md mtime 拨回 7 天前 → 应报"领域语言" ----
   //   （守卫参数曾被改 14→5 无断言锁——本用例锁住"5 天阈值必须会响"这一行为本身）
-  const ctxFile = path.join(REAL, ".context", "CONTEXT.md");
+  const ctxFile = path.join(ROOT, ".context", "CONTEXT.md");
   const ctxStat = fs.statSync(ctxFile);
   const oldTime = new Date(Date.now() - 7 * 86400000);
   fs.utimesSync(ctxFile, oldTime, oldTime);
@@ -85,7 +106,7 @@ try {
   cleanup(() => { try { fs.utimesSync(ctxFile, ctxStat.atime, ctxStat.mtime); } catch {} });
 
   // ---- F22 恢复健康门（R1 事故固化）：resume-manifest 暂移 → check ok:false → 应报"压缩恢复健康门红" ----
-  const rmFile = path.join(REAL, "resume-manifest.json");
+  const rmFile = path.join(ROOT, "resume-manifest.json");
   const rmBak = fs.existsSync(rmFile) ? fs.readFileSync(rmFile, "utf8") : null;
   fs.rmSync(rmFile, { force: true });
   check("F22 恢复健康门红会响", staleWith(verify(), "压缩恢复健康门"));
@@ -94,7 +115,7 @@ try {
 
   // ---- F24 重大改动待查验（2026-09-16 加；audit-due flag 驱动）----
   {
-    const fl = path.join(REAL, ".flags", "audit-due.json");
+    const fl = path.join(ROOT, ".flags", "audit-due.json");
     const bak = fs.existsSync(fl) ? fs.readFileSync(fl, "utf8") : null;
     fs.mkdirSync(path.dirname(fl), { recursive: true });
     fs.writeFileSync(fl, JSON.stringify({ baseline: "2026-09-01T00:00:00.000Z", due: true, changed: ["G-SELFTEST"], checkedAt: new Date().toISOString() }, null, 2));
@@ -105,7 +126,7 @@ try {
 
   // ---- F25 盲区账本（2026-09-16 加；两种可行动形态）----
   {
-    const lf = path.join(REAL, "core", "blindspot-ledger.md");
+    const lf = path.join(ROOT, "core", "blindspot-ledger.md");
     const bak = fs.readFileSync(lf, "utf8");
     cleanup(() => fs.writeFileSync(lf, bak));
     // ① 标"阻塞"且未观测 → 应响
@@ -117,21 +138,21 @@ try {
     fs.writeFileSync(lf, bak);
   }
 
-  // ---- F26 cp-autopilot 停跑（2026-09-28 加）：伪造 60 天前的加载记录 → 应报"cp-autopilot" ----
+  // ---- F26 接入端自动扩展停跑：伪造 60 天前的加载记录 → 应报自动扩展停跑 ----
   {
-    const aplFile = path.join(REAL, ".flags", "cp-autopilot.log");
+    const aplFile = path.join(ROOT, ".flags", "cp-autopilot.log");
     const aplBak = fs.existsSync(aplFile) ? fs.readFileSync(aplFile, "utf8") : null;
     if (aplBak === null) fs.mkdirSync(path.dirname(aplFile), { recursive: true });
     cleanup(() => { if (aplBak === null) fs.rmSync(aplFile, { force: true }); else fs.writeFileSync(aplFile, aplBak); });
     fs.writeFileSync(aplFile, "[2026-06-01T00:00:00.000Z] module evaluated\n[2026-06-01T00:00:00.100Z] factory called\n");
-    check("F26 cp-autopilot 停跑会响", staleWith(verify(), "cp-autopilot"));
+    check("F26 自动扩展停跑会响", staleWith(verify(), "接入端自动扩展"));
     if (aplBak === null) fs.rmSync(aplFile, { force: true }); else fs.writeFileSync(aplFile, aplBak);
   }
 
   // ---- F27 交付测试台账（2026-09-29 加）：伪造“已登记交付物被改动”（testedAt=过去、mtime=现在）
   //   → 应报“[F27] 交付物有改动晚于最后测试”。注入物带 G-SELFTEST 标记；台账现场恢复。----
   {
-    const dvFile = path.join(REAL, ".flags", "delivery-verification.jsonl");
+    const dvFile = path.join(ROOT, ".flags", "delivery-verification.jsonl");
     const dvBak = fs.existsSync(dvFile) ? fs.readFileSync(dvFile, "utf8") : null;
     if (dvBak === null) fs.mkdirSync(path.dirname(dvFile), { recursive: true });
     cleanup(() => { if (dvBak === null) fs.rmSync(dvFile, { force: true }); else fs.writeFileSync(dvFile, dvBak); });
@@ -157,14 +178,14 @@ try {
     const jl = path.join(tmpProj, "p", tag + ".jsonl");
     fs.writeFileSync(jl, "{}\n");
     fs.utimesSync(jl, new Date(twoH), new Date(twoH));
-    const dayFile = path.join(REAL, "daily", tag + ".md");
+    const dayFile = path.join(ROOT, "daily", tag + ".md");
     const dst = fs.existsSync(dayFile) ? fs.statSync(dayFile) : null;
     if (dst) fs.utimesSync(dayFile, new Date(Date.now() - 3 * 3600 * 1000), new Date(Date.now() - 3 * 3600 * 1000));
     cleanup(() => { if (dst) fs.utimesSync(dayFile, dst.atime, dst.mtime); fs.rmSync(tmpProj, { recursive: true, force: true }); });
     if (!dst) {
       check("F7 Stop hook 静默失败会响", true, "本机无当日 daily 文件，跳过（非通过）");
     } else {
-      const r7 = spawnSync(NODE, [path.join(REAL, "memory-cli.js"), "verify", "--root", REAL], { encoding: "utf8", timeout: 60000, env: { ...process.env, CP_CC_PROJECTS: tmpProj } });
+      const r7 = spawnSync(NODE, [path.join(ROOT, "memory-cli.js"), "verify", "--root", ROOT], { encoding: "utf8", timeout: 60000, env: { ...process.env, CP_ROOT: ROOT, CP_CC_PROJECTS: tmpProj } });
       let v7 = { stale: [] };
       try { v7 = JSON.parse(r7.stdout || "{}"); } catch {}
       check("F7 Stop hook 静默失败会响", (v7.stale || []).some((x) => x.includes("Stop hook 可能静默失败")));
@@ -201,7 +222,7 @@ try {
   //   ⚠️ **风险如实登记**：这 12 条若因代码改动而**永不触发**，现有测试发现不了 —— 属**未观测盲区**（同
   //      `core/blindspot-ledger.md` C 类性质）。本裁决**不等于**"它们一定还在正常工作"。
   {
-    const src = fs.readFileSync(path.join(REAL, "memory-cli.js"), "utf8");
+    const src = fs.readFileSync(path.join(ROOT, "memory-cli.js"), "utf8");
     const self = fs.readFileSync(__filename, "utf8");
     // 两侧判据必须不同（M1 的根因就是两侧混用同一种"文本出现"）：
     //   verify 侧：守卫编号写在**注释标签**里（如 `// 错误计数守卫（F16 …）`）→ 从原文取 F 编号
@@ -210,7 +231,7 @@ try {
     const inVerify = [...new Set((src.match(/F\d+/g) || []))].filter(F_RANGE);
     const inSelf = [...new Set([...self.matchAll(/check\(\s*["'`]F(\d+)/g)].map((m) => "F" + m[1]))];
     const missing = inVerify.filter((f) => !inSelf.includes(f)).sort((a, b) => +a.slice(1) - +b.slice(1));
-    const baseFile = path.join(REAL, ".flags", "guard-coverage.json");
+    const baseFile = path.join(ROOT, ".flags", "guard-coverage.json");
     let known = null;
     try { known = JSON.parse(fs.readFileSync(baseFile, "utf8")).known || []; } catch { known = null; }
     // 基线缺失 ≠ 有新增守卫（2026-09-16 修）：在**被拷贝/全新**的环境里（如升级彩排的沙箱）该文件不存在，
@@ -229,6 +250,7 @@ try {
   }
 } finally {
   for (const fn of cleanups) { try { fn(); } catch {} }
+  try { fs.rmSync(SB, { recursive: true, force: true }); } catch {}
 }
 console.log(`\n===== guard-selftest: ${pass} passed / ${fail} failed =====`);
 process.exit(fail ? 1 : 0);

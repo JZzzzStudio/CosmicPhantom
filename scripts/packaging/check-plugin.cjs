@@ -25,12 +25,23 @@ if (manifest) {
     else if (!fs.existsSync(path.join(root, adapter.manifest))) errors.push(`适配器清单不存在: ${adapter.manifest}`);
   }
 }
+const FORBIDDEN_DIR = /^(memories|candidates|daily|distilled|domains|backup|logs|embedding-db|cursors|\.flags)$/i;
+const FORBIDDEN_FILE = /(^|\/)(events\.db(-wal|-shm)?|[^/]*\.(db|sqlite|sqlite3|wal|shm)|[^/]*\.lock|hook-errors\.log|failopen-stats\.json|host-checks\.json|sources\.json|current-state\.json|state-timestamps\.json|state-poll\.json|resume-manifest\.json|hosts\.json|change-log\.jsonl|change-baseline\.json|coverage-history\.json|event-index\.json|links\.json|processed\.json|project-root\.json|state-db-path\.txt|WHERE\.txt|\.proma-cursor\.json|\.env(\.[^/]*)?|[^/]*cursor[^/]*)$/i;
+const FORBIDDEN_NAME_WORD = /(^|[-_.])(credentials?|secrets?|tokens?)([-_.]|$)/i;
+const BINARY_EXT = /\.(png|jpe?g|gif|webp|ico|onnx|bin|node|wasm|zip|gz|tar|pdf|mp3|mp4|woff2?|ttf|asar)$/i;
+const CREDENTIAL_LITERAL = /(?:api[_-]?key|apikey|secret|password|passwd|access[_-]?token|auth[_-]?token|token)\s*[:=]\s*["']([^"'\n]{8,})["']/gi;
+const PLACEHOLDER_VALUE = /^(?:<|\$\{|%|\{\{|x{4,}|\*{4,}|YOUR|REPLACE|EXAMPLE|placeholder|changeme|test|dummy|sample)/i;
+const USER_HOME_PATH = /(?:[A-Za-z]:\\Users\\[^\\\s"'<>|]+|\/Users\/[^/\s"'<>|]+|\/home\/[^/\s"'<>|]+)/;
+const MAX_SCAN_BYTES = 5 * 1024 * 1024;
 const files = [];
 function walk(dir) {
   if (!fs.existsSync(dir)) return;
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
     const file = path.join(dir, entry.name);
-    if (entry.isDirectory()) walk(file);
+    if (entry.isDirectory()) {
+      if (FORBIDDEN_DIR.test(entry.name)) errors.push(`禁止打包实例数据目录: ${path.relative(root, file).replace(/\\/g, "/")}`);
+      walk(file);
+    }
     else if (!entry.name.endsWith(".cptmp")) files.push(path.relative(root, file).replace(/\\/g, "/"));
   }
 }
@@ -60,6 +71,21 @@ for (const file of files.filter((item) => /\.(?:cjs|js|mjs)$/.test(item))) {
     const candidates = [base, `${base}.js`, `${base}.cjs`, `${base}.mjs`, path.join(base, "index.js"), path.join(base, "index.cjs")];
     if (!candidates.some((candidate) => fs.existsSync(candidate))) errors.push(`${file}: 相对依赖不存在 ${request}`);
   }
+}
+for (const file of files) {
+  const base = path.basename(file);
+  if (FORBIDDEN_FILE.test(file) || FORBIDDEN_NAME_WORD.test(base)) {
+    errors.push(`禁止打包实例数据/私有文件: ${file}`);
+    continue;
+  }
+  if (BINARY_EXT.test(file)) continue;
+  const absolute = path.join(root, file);
+  if (fs.statSync(absolute).size > MAX_SCAN_BYTES) { errors.push(`文件过大无法内容校验: ${file}`); continue; }
+  const source = fs.readFileSync(absolute, "utf8");
+  for (const match of source.matchAll(CREDENTIAL_LITERAL)) {
+    if (!PLACEHOLDER_VALUE.test(match[1])) errors.push(`疑似凭据字面量: ${file}`);
+  }
+  if (USER_HOME_PATH.test(source)) errors.push(`字面用户目录绝对路径: ${file}`);
 }
 const result = { ok: errors.length === 0, root, manifest: manifest ? { id: manifest.id, version: manifest.version, kind: manifest.kind } : null, files: files.length, errors, warnings };
 process.stdout.write(JSON.stringify(result, null, 2) + "\n");

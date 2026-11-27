@@ -8,7 +8,7 @@ import { spawnSync } from "node:child_process";
 const root = process.cwd();
 const data = mkdtempSync(join(tmpdir(), "cp-sync-data-"));
 const sync = join(root, "cp-sync.cjs");
-const git = process.env.CP_GIT || join(root, "tools", "git", "cmd", "git.exe");
+const git = process.env.CP_GIT || "git";
 let failed = 0;
 function check(name, condition, detail = "") {
   if (condition) console.log(`PASS ${name}`);

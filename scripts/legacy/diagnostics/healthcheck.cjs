@@ -49,7 +49,7 @@ function walkForStartBat(dir, depth, maxDepth) {
 let PKG = arg("--package");
 if (PKG && !fs.existsSync(path.join(PKG, "START.bat"))) PKG = null;
 if (!PKG) {
-  const roots = ["D:\\AIGC", "D:\\", "E:\\AIGC", "E:\\", "F:\\", "C:\\AIGC"];
+  const roots = (process.env.CP_DIAG_ROOTS || "C:\\,D:\\,E:\\,F:\\").split(",").map((root) => root.trim()).filter(Boolean);
   for (const r of roots) {
     if (!fs.existsSync(r)) continue;
     const hit = walkForStartBat(r, 0, 3);

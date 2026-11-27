@@ -97,6 +97,7 @@ MCP 配置可参考 `templates/` 下与当前环境格式匹配的示例。所�
 | `CP_DATA_DIR` | 数据镜像仓位置 |
 | `CP_HOST` | 写入 `events.src_host` 的接入端标识；不等于权限系统 |
 | `CP_GIT` | 指定 Git 可执行文件；用于受限环境 |
+| `CP_ZCODE_DB` / `CP_PROMA_SESSIONS_DIR` / `CP_AITEAM_STATE_BUILDER` | 宿主适配器/钩子显式声明的来源路径（会话库、会话目录、面板构建脚本）；未声明则可见跳过，不隐式探测；也可经对应参数显式传入 |
 | `CP_USER_NAME` | 本机运行时的用户称呼，仅供 `ref-hunt` 生成 `person:` 候选；不应写入公共代码仓或共享配置 |
 | `sources.json` | 实例来源注册、启用状态和 coverage 参数 |
 | `hosts.json` | 实例接入端角色和规则挂载；不属于公共代码仓默认配置 |
@@ -104,6 +105,55 @@ MCP 配置可参考 `templates/` 下与当前环境格式匹配的示例。所�
 | `binaries.manifest.json` | 大件的 URL、版本、sha256 和校验方式 |
 
 作用域 `global | workspace | agent` 表示内容适用范围，不是多用户权限模型。提纯内容的默认作用域必须由来源决定，升档要有显式动作和来源记录。
+
+### 4.1 宿主检查是显式选择
+
+通用引擎不会根据用户主目录猜测已安装的 Agent，也不会默认扫描未声明的 hook、transcript、技能或注入文件。需要启用这些检查时，在实例根放置 `host-checks.json`，或通过 `CP_HOST_CHECKS` 指定配置文件：
+
+```json
+{
+  "hook": {
+    "logDir": "<hook-log-dir>",
+    "configPath": "<hook-config-file>"
+  },
+  "transcript": {
+    "projectsDir": "<transcript-projects-dir>"
+  },
+  "skillMounts": {
+    "home": "<skill-mount-home>"
+  },
+  "replyPolicyTargets": [
+    { "name": "<target-name>", "path": "<reply-policy-file>" }
+  ],
+  "injection": {
+    "userFile": "<user-injection-file>"
+  }
+}
+```
+
+- 配置文件中的相对路径相对于 `host-checks.json` 所在目录；环境变量中的相对路径相对于当前工作目录。
+- 未提供实例级 `host-checks.json` 时，宿主检查跳过；显式指定但文件缺失或格式错误时，`verify` 和 `quota` 都会报告全部配置错误。
+- 已提供 `host-checks.json` 但没有任何 `replyPolicyTargets`（也没有 `CP_REPLY_POLICY_FILE`）时，`verify` 会明确提示 F20 未配置门禁派生目标；这不是门禁通过，而是该检查没有目标可比对。
+- 环境变量优先于同名 JSON 配置；空环境变量表示明确关闭该路径，不会回退到 JSON 值。
+- 支持的环境变量：`CP_HOST_CHECKS`、`CP_HOOK_LOG_DIR`、`CP_HOOK_CONFIG`、`CP_CC_PROJECTS`、`CP_SKILL_HOME`、`CP_REPLY_POLICY_FILE`、`CP_REPLY_POLICY_NAME`、`CP_INJECTION_USER_FILE`。
+- `CP_REPLY_POLICY_NAME` 只作为报告标签，不是文件路径；`CP_REPLY_POLICY_FILE` 才是实际检查目标。
+
+### 4.2 技能挂载清单
+
+技能挂载同样采用显式清单。把 `skill-mounts.json` 放在实例根，使用 `skills-sync.js check --root <instance> --home <mount-home>` 检查：
+
+```json
+{
+  "mounts": [
+    { "name": "agent-skills", "path": ".agent/skills" }
+  ]
+}
+```
+
+- `mounts` 缺失、为空或整个 `skill-mounts.json` 不存在时，不检查任何宿主目录。
+- 挂载项必须有唯一的 `name` 和非空 `path`；相对 `path` 相对于 `--home`，绝对路径按原值使用。
+- 清单格式错误、挂载目录不存在、技能缺失或内容不一致都会返回可读错误；不会静默改写挂载目录。
+- `verify` 只有在 `CP_SKILL_HOME` 或 `host-checks.json.skillMounts.home` 显式声明挂载位置时才执行挂载一致性检查。
 
 ## 5. 验收与排障
 

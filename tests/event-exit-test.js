@@ -4,8 +4,8 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 
-const REAL = path.join(os.homedir(), '.cosmic-phantom');
-const NODE = path.join(REAL, 'tools', 'node', 'node.exe');
+const REAL = path.resolve(__dirname, '..');
+const NODE = process.execPath;
 const SB = fs.mkdtempSync(path.join(os.tmpdir(), 'cp-exit-'));
 let pass = 0, fail = 0;
 const check = (n, c, d = '') => { if (c) { pass++; console.log('  [PASS] ' + n); } else { fail++; console.log('  [FAIL] ' + n + ' -- ' + d); } };
@@ -63,6 +63,40 @@ check('5. 不存在的 mid 被拒', missing.ok === false, JSON.stringify(missing
 
 const tiers = run(['tiers']);
 check('6. 分层体检输出三段', Number.isFinite(tiers.hot90) && Number.isFinite(tiers.warm365) && Number.isFinite(tiers.cold), JSON.stringify(tiers).slice(0, 140));
+
+console.log('=== 根解析与失败退出（A 组） ===');
+const runFull = (args, env = {}, root = SB) => {
+  const fullArgs = root ? [...args, '--root', root] : [...args];
+  const r = spawnSync(NODE, ['--experimental-sqlite', path.join(REAL, 'events.js'), ...fullArgs], { encoding: 'utf8', timeout: 60000, env: { ...process.env, CP_DATA_DIR: path.join(SB, 'no-data-repo'), ...env } });
+  let json = null;
+  try { json = JSON.parse(r.stdout.trim().split('\n').pop()); } catch {}
+  return { status: r.status, json, stderr: r.stderr };
+};
+const rootOnly = fs.mkdtempSync(path.join(os.tmpdir(), 'cp-rootonly-'));
+const fakeHome = fs.mkdtempSync(path.join(os.tmpdir(), 'cp-home-'));
+const emptyRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'cp-empty-'));
+const probe = path.join(SB, 'root-probe.jsonl');
+fs.writeFileSync(probe, JSON.stringify({ type: 'user', message: { id: 'rp-1', content: [{ type: 'text', text: '根解析探针' }] } }) + '\n', 'utf8');
+const onlyEnv = runFull(['manual', '--transcript', probe, '--session', 'root-probe'], { CP_ROOT: rootOnly }, null);
+check('7. 只有 CP_ROOT：数据落 CP_ROOT', onlyEnv.status === 0 && onlyEnv.json.logged === 1 && fs.existsSync(path.join(rootOnly, 'events.db')), JSON.stringify(onlyEnv.json).slice(0, 140));
+const override = runFull(['status'], { CP_ROOT: rootOnly }, SB);
+check('8. --root 覆盖冲突 CP_ROOT', override.status === 0 && override.json.db === path.join(SB, 'events.db'), JSON.stringify({ db: override.json && override.json.db }).slice(0, 140));
+const dflt = runFull(['manual', '--transcript', probe, '--session', 'root-probe'], { USERPROFILE: fakeHome, CP_ROOT: '' }, null);
+check('9. 无 --root/CP_ROOT 用默认根（隔离 home）', dflt.status === 0 && fs.existsSync(path.join(fakeHome, '.cosmic-phantom', 'events.db')), JSON.stringify(dflt.json).slice(0, 140));
+for (const command of ['status', 'tiers', 'independence', 'expand', 'coverage', 'index', 'find']) {
+  const failedRun = runFull([command], {}, emptyRoot);
+  check('10. 空根 ' + command + ' 非零且带 error', failedRun.status !== 0 && failedRun.json && !!failedRun.json.error, JSON.stringify(failedRun.json).slice(0, 120));
+}
+check('10a. 只读失败命令不创建 events.db', !fs.existsSync(path.join(emptyRoot, 'events.db')));
+fs.mkdirSync(path.join(SB, '.cp-projection.lock'));
+const busy = runFull(['project'], {}, SB);
+check('11. 投影锁占用 → project 非零且带 error', busy.status !== 0 && busy.json && !!busy.json.error, JSON.stringify(busy.json).slice(0, 140));
+const busyManual = runFull(['manual', '--transcript', probe, '--session', 'busy-probe'], {}, SB);
+check('12. manual 投影失败传播到顶层退出码', busyManual.status !== 0 && busyManual.json.projection && busyManual.json.projection.ok === false, JSON.stringify(busyManual.json).slice(0, 160));
+fs.rmSync(path.join(SB, '.cp-projection.lock'), { recursive: true, force: true });
+fs.rmSync(rootOnly, { recursive: true, force: true });
+fs.rmSync(fakeHome, { recursive: true, force: true });
+fs.rmSync(emptyRoot, { recursive: true, force: true });
 
 fs.rmSync(SB, { recursive: true, force: true });
 console.log('\n' + (fail === 0 ? 'ALL PASS' : 'FAILED') + ': ' + pass + '/' + (pass + fail));

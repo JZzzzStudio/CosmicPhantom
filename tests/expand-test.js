@@ -6,8 +6,8 @@ const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
 
-const REAL = path.join(os.homedir(), ".cosmic-phantom");
-const NODE = path.join(REAL, "tools", "node", "node.exe");
+const REAL = path.resolve(__dirname, "..");
+const NODE = process.execPath;
 const SB = fs.mkdtempSync(path.join(os.tmpdir(), "cp-expand-"));
 const ROOT = path.join(SB, "root");
 const MEM = path.join(ROOT, "memories");
@@ -35,7 +35,7 @@ function jparse(r) {
 
 (async () => {
   // ---- 沙箱搭建 ----
-  for (const f of ["events.js", "memory-cli.js", "memory-retrieval.js", "link-graph.js", "skills-sync.js", "session-adapter.js"]) copy(f);
+  for (const f of ["events.js", "memory-cli.js", "memory-retrieval.js", "link-graph.js", "skills-sync.js", "session-adapter.js", "decision-cards.js", "validate.js", "embed.js", "embed-tokenizer.js"]) copy(f);
   copy("lib/failopen.js");
   fs.writeFileSync(path.join(ROOT, "package.json"), JSON.stringify({ name: "cp-sandbox", type: "module", private: true }), "utf8");
   fs.mkdirSync(MEM, { recursive: true });

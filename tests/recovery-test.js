@@ -4,9 +4,10 @@ const crypto = require("node:crypto");
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
+const { writePublicState, writePublicMemory, writePublicContext, writePublicCore } = require("./fixtures/public-fixtures.cjs");
 
-const REAL = path.join(os.homedir(), ".cosmic-phantom");
-const NODE = path.join(REAL, "tools", "node", "node.exe");
+const REAL = path.resolve(__dirname, "..");
+const NODE = process.execPath;
 const SB = fs.mkdtempSync(path.join(os.tmpdir(), "cp-recovery-"));
 let pass = 0, fail = 0;
 function check(name, condition, detail = "") {
@@ -20,7 +21,11 @@ function copy(relative) {
 }
 // 2026-09-16 同步：resume-context.js 的 SOURCE_FILES 新增 `.context/CONTEXT.md`，
 //   沙箱不同步拷贝它会让 refresh 报 `incomplete`（missing 非空）而非 `fresh` → P2/P3 假红。
-for (const file of ["current-state.js", "current-state.json", "reply-policy.json", "resume-context.js", "reply-check.js", "inject.js", "memory-retrieval.js", "identity-card.js", "inject-config.js", "inject.config.json", "MEMORY.md", "package.json", "core/rules.md", "core/reply-style.md", ".context/CONTEXT.md", "lib/failopen.js"]) copy(file);
+for (const file of ["current-state.js", "reply-policy.json", "resume-context.js", "reply-check.js", "inject.js", "memory-retrieval.js", "identity-card.js", "inject-config.js", "inject.config.json", "package.json", "lib/failopen.js"]) copy(file);
+writePublicState(SB);
+writePublicMemory(SB);
+writePublicContext(SB);
+writePublicCore(SB);
 fs.mkdirSync(path.join(SB, "memories"), { recursive: true });
 fs.writeFileSync(path.join(SB, "resume-manifest.json"), JSON.stringify({ schemaVersion: 1, policyRevision: 1, stateFile: "current-state.json", policyFile: "reply-policy.json", sources: {}, status: "provisional" }, null, 2));
 const expectedRevision = JSON.parse(fs.readFileSync(path.join(SB, "current-state.json"), "utf8")).revision;
@@ -51,10 +56,10 @@ result = spawnSync(NODE, [path.join(SB, "reply-check.js"), "--root", SB, "--corr
 payload = JSON.parse(result.stdout);
 check("P8 direct Chinese technical reply passes preflight", payload.ok === true && payload.stateRevision === expectedRevision, result.stdout);
 
-const prodState = path.join(REAL, "current-state.json");
-const before = crypto.createHash("sha256").update(fs.readFileSync(prodState)).digest("hex");
-const after = crypto.createHash("sha256").update(fs.readFileSync(prodState)).digest("hex");
-check("P9 production current state is unchanged", before === after, `${before} -> ${after}`);
+const sandboxState = path.join(SB, "current-state.json");
+const before = crypto.createHash("sha256").update(fs.readFileSync(sandboxState)).digest("hex");
+const after = crypto.createHash("sha256").update(fs.readFileSync(sandboxState)).digest("hex");
+check("P9 sandbox current state is unchanged", before === after, `${before} -> ${after}`);
 fs.rmSync(SB, { recursive: true, force: true });
 check("P10 temporary sandbox is cleaned", !fs.existsSync(SB));
 console.log(`\n===== recovery-test: ${pass} passed / ${fail} failed =====`);

@@ -4,9 +4,10 @@ const { spawnSync } = require("node:child_process");
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
+const { writePublicState, writePublicMemory, writePublicContext, writePublicCore, writePublicDaily } = require("./fixtures/public-fixtures.cjs");
 
-const REAL = path.join(os.homedir(), ".cosmic-phantom");
-const NODE = path.join(REAL, "tools", "node", "node.exe");
+const REAL = path.resolve(__dirname, "..");
+const NODE = process.execPath;
 const SB = fs.mkdtempSync(path.join(os.tmpdir(), "cp-continuity-r-"));
 let pass = 0, fail = 0;
 function check(name, condition, detail = "") {
@@ -18,21 +19,19 @@ function copy(relative) {
   fs.mkdirSync(path.dirname(target), { recursive: true });
   fs.copyFileSync(path.join(REAL, relative), target);
 }
-for (const file of ["identity-card.js", "inject-config.js", "inject.config.json", "current-state.js", "current-state.json", "reply-policy.json", "MEMORY.md", "resume-context.js", "inject.js", "memory-retrieval.js", "lib/failopen.js", "package.json"]) copy(file);
+for (const file of ["identity-card.js", "inject-config.js", "inject.config.json", "current-state.js", "reply-policy.json", "resume-context.js", "inject.js", "memory-retrieval.js", "lib/failopen.js", "package.json"]) copy(file);
 fs.mkdirSync(path.join(SB, "daily"), { recursive: true });
 fs.mkdirSync(path.join(SB, "memories"), { recursive: true });
-const dailyDir = path.join(REAL, "daily");
-if (fs.existsSync(dailyDir)) {
-  const latest = fs.readdirSync(dailyDir).filter(f => /^\d{4}-\d{2}-\d{2}\.md$/.test(f)).sort().at(-1);
-  if (latest) fs.copyFileSync(path.join(dailyDir, latest), path.join(SB, "daily", latest));
-}
+writePublicState(SB);
+writePublicMemory(SB);
+writePublicContext(SB);
+writePublicCore(SB);
 const DAILY_RAW_SENTINEL = "CONTINUITY_DAILY_RAW_MUST_STAY_HIDDEN";
-const copiedDaily = fs.readdirSync(path.join(SB, "daily")).filter(f => /^\d{4}-\d{2}-\d{2}\.md$/.test(f)).sort().at(-1);
-if (copiedDaily) fs.appendFileSync(path.join(SB, "daily", copiedDaily), `\n${DAILY_RAW_SENTINEL}\n`, "utf8");
+writePublicDaily(SB, "2099-01-01.md", DAILY_RAW_SENTINEL);
 // 记忆样本（供透镜检索）
 fs.writeFileSync(path.join(SB, "memories", "20260810-0001.md"), "title: 记忆系统恢复\nstatus: 🟢当前\n用户要求基于现有资产继续推进记忆系统。\n");
-const prodState = path.join(REAL, "current-state.json");
-const before = require("node:crypto").createHash("sha256").update(fs.readFileSync(prodState)).digest("hex");
+const sandboxState = path.join(SB, "current-state.json");
+const before = require("node:crypto").createHash("sha256").update(fs.readFileSync(sandboxState)).digest("hex");
 
 function run(args) {
   const result = spawnSync(NODE, [path.join(SB, "inject.js"), ...args, "--root", SB], { encoding: "utf8", timeout: 30000 });
@@ -55,8 +54,8 @@ check("CT5 state and obligation restored", r.out.includes("接力状态") && r.o
 check("CT6 lens-focused memory retrieval", r.out.includes("记忆系统恢复"), "memory hit missing");
 check("CT7 bounded output", r.out.includes("</identity-card>"), "card unclosed");
 
-const after = require("node:crypto").createHash("sha256").update(fs.readFileSync(prodState)).digest("hex");
-check("CT8 production current state unchanged", before === after, `${before} -> ${after}`);
+const after = require("node:crypto").createHash("sha256").update(fs.readFileSync(sandboxState)).digest("hex");
+check("CT8 sandbox current state unchanged", before === after, `${before} -> ${after}`);
 
 fs.rmSync(SB, { recursive: true, force: true });
 check("CT9 temporary sandbox cleaned", !fs.existsSync(SB));

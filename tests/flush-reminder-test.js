@@ -5,11 +5,11 @@ const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
 
-const REAL = path.join(os.homedir(), ".cosmic-phantom");
-const NODE = path.join(REAL, "tools", "node", "node.exe");
+const REAL = path.resolve(__dirname, "..");
+const NODE = process.execPath;
 const SB = fs.mkdtempSync(path.join(os.tmpdir(), "cp-flush-reminder-"));
 const ROOT = path.join(SB, "root");
-const SCRIPT = path.join(REAL, "flush-reminder.cjs");
+const SCRIPT = path.join(ROOT, "flush-reminder.cjs");
 let pass = 0, fail = 0;
 
 function check(name, condition, detail = "") {
@@ -37,6 +37,7 @@ const ago = (minutes) => new Date(Date.now() - minutes * 60000).toISOString();
 
 try {
   fs.mkdirSync(ROOT, { recursive: true });
+  fs.copyFileSync(path.join(REAL, "flush-reminder.cjs"), SCRIPT);
 
   // 场景1：30 分钟内刚落过 🛠️ → 不提醒
   seedDb([

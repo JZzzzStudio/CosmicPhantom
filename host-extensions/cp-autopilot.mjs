@@ -10,7 +10,7 @@ import os from 'node:os'
 const ROOT = os.homedir() + '/.cosmic-phantom'
 const LOG = ROOT + '/.flags/cp-autopilot.log'
 const NODE = ROOT + '/tools/node/node.exe'
-const SESSIONS = os.homedir() + '/.proma/agent-sessions'
+const SESSIONS = process.env.CP_PROMA_SESSIONS_DIR || ''
 const TMPREPLY = ROOT + '/.flags/cp-last-reply.txt'
 const NL = String.fromCharCode(10)
 
@@ -205,12 +205,16 @@ export default function cpAutopilot(pi) {
         const now = Date.now()
         if (now - lastIngest > 120000) {
           lastIngest = now
-          const r = await runAsync(['--experimental-sqlite', ROOT + '/proma-adapter.js', '--sessions-dir', SESSIONS, '--root', ROOT], 130000)
-          try {
-            const j = parseLoose(r.stdout)
-            if (!j) throw new Error('parse null')
-            log('auto-ingest: added=' + j.added + ' projected=' + j.projected)
-          } catch (e) { log('auto-ingest skip: ' + (r.err ? String(r.err.message).slice(0, 60) : 'no-json') + ' | stdout尾: ' + r.stdout.slice(-150).replace(/\n/g, ' ')) }
+          if (!SESSIONS) {
+            log('auto-ingest skip: CP_PROMA_SESSIONS_DIR 未声明，Proma 会话源未接入')
+          } else {
+            const r = await runAsync(['--experimental-sqlite', ROOT + '/proma-adapter.js', '--sessions-dir', SESSIONS, '--root', ROOT], 130000)
+            try {
+              const j = parseLoose(r.stdout)
+              if (!j) throw new Error('parse null')
+              log('auto-ingest: added=' + j.added + ' projected=' + j.projected)
+            } catch (e) { log('auto-ingest skip: ' + (r.err ? String(r.err.message).slice(0, 60) : 'no-json') + ' | stdout尾: ' + r.stdout.slice(-150).replace(/\n/g, ' ')) }
+          }
         }
       }
     } catch (e) { log('message_end err: ' + String(e.message).slice(0, 100)) }

@@ -58,9 +58,12 @@ node --experimental-sqlite memory-cli.js verify
 ## 5. 接到当前 Agent 环境
 
 1. 选择与当前环境格式匹配的 `templates/*-mcp.json` 或 MCP 配置模板，把 server 指向 `resources/mcp-server/index.js`，并把 `--root` 指到实例目录。
-2. 跑一次 `node skills-sync.js check`；不一致时按当前环境的技能目录规则从 `skills/` 同步。
-3. 如当前环境支持扩展目录，再运行 `node scripts/install-host-extensions.cjs --check`；该脚本只适用于它声明的扩展布局，不要把它当作所有环境的通用安装器。
-4. 重启或重新加载当前环境后，确认 `recall_memory`、`get_current_state` 两个工具可调用，并检查 `events.js coverage` 是否有缺口。
+2. 如需宿主健康检查，在实例根创建 `host-checks.json`，只填写当前环境真实存在的路径；也可用 `CP_HOST_CHECKS` 指向显式配置文件。未配置时不会扫描用户主目录。
+3. 如需技能挂载检查，在实例根创建 `skill-mounts.json`，再运行 `node skills-sync.js check --root <实例目录> --home <挂载基准目录>`；没有清单时不会检查任何宿主技能目录。
+4. 如当前环境支持扩展目录，再运行 `node scripts/install-host-extensions.cjs --check`；该脚本只适用于它声明的扩展布局，不要把它当作所有环境的通用安装器。
+5. 重启或重新加载当前环境后，确认 `recall_memory`、`get_current_state` 两个工具可调用，并检查 `events.js coverage` 是否有缺口。
+
+`host-checks.json` 支持 `hook.logDir`、`hook.configPath`、`transcript.projectsDir`、`skillMounts.home`、`replyPolicyTargets` 和 `injection.userFile`；对应环境变量为 `CP_HOST_CHECKS`、`CP_HOOK_LOG_DIR`、`CP_HOOK_CONFIG`、`CP_CC_PROJECTS`、`CP_SKILL_HOME`、`CP_REPLY_POLICY_FILE`、`CP_REPLY_POLICY_NAME`、`CP_INJECTION_USER_FILE`。完整示例见 [`docs/AGENT-CONFIG.md`](docs/AGENT-CONFIG.md)。
 
 ## 6. 收尾
 

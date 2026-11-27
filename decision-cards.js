@@ -12,16 +12,19 @@
  * 用法:
  *   node decision-cards.js [--date YYYY-MM-DD] [--root <根>] [--dry-run]
  *   --date 默认今天；--dry-run 只报告将生成/跳过/失败，不写卡
- * 挂载（ZCode 自动通道）：zcode-flush.cjs 末尾调用（不传 --date = 当天）
+ * 接入端可以在会话结束时调用（不传 --date = 当天）
  */
 import { readFileSync, writeFileSync, existsSync, readdirSync, mkdirSync, rmSync } from "node:fs";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { homedir } from "node:os";
 import { spawnSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
 import { listMemoryEntries, topicKey, appendEntry, mutateEntryById } from "./memory-retrieval.js";
 
+const ENGINE_ROOT = dirname(fileURLToPath(import.meta.url));
 const ROOT = process.argv.includes("--root") ? process.argv[process.argv.indexOf("--root") + 1] : join(homedir(), ".cosmic-phantom");
-const NODE_BIN = join(ROOT, "tools", "node", "node.exe");
+const portableNode = join(ENGINE_ROOT, "tools", "node", process.platform === "win32" ? "node.exe" : "node");
+const NODE_BIN = existsSync(portableNode) ? portableNode : process.execPath;
 const DRY = process.argv.includes("--dry-run");
 const DATE = (process.argv.includes("--date") ? process.argv[process.argv.indexOf("--date") + 1] : new Date().toISOString().slice(0, 10));
 
@@ -65,8 +68,7 @@ function existingIndex() {
 }
 
 function validateFile(file) {
-  const args = [join(ROOT, "validate.js"), "check", file, "--skip-ephemeral"];   // 决策原文保真优先，豁免吸收点 H 临时性门
-  if (ROOT !== join(homedir(), ".cosmic-phantom")) args.push("--root", ROOT);
+  const args = [join(ENGINE_ROOT, "validate.js"), "check", file, "--skip-ephemeral", "--root", ROOT];   // 决策原文保真优先，豁免吸收点 H 临时性门
   const r = spawnSync(NODE_BIN, args, { encoding: "utf8", timeout: 30000 });
   try { return JSON.parse(r.stdout || "{}"); } catch { return { ok: false, reasons: ["校验器输出不可解析"] }; }
 }
@@ -156,17 +158,17 @@ ${content}
 function refreshDerivedIndexes() {
   // 写卡后刷新派生索引（2026-08-17）：memory-index（与 add 同源）+ links（relink）+ embed（增量，防 F9/F10 漂移）
   const failed = [];
-  const idx = spawnSync(NODE_BIN, [join(ROOT, "memory-cli.js"), "index", "--root", ROOT], { encoding: "utf8", timeout: 60000 });
+  const idx = spawnSync(NODE_BIN, [join(ENGINE_ROOT, "memory-cli.js"), "index", "--root", ROOT], { encoding: "utf8", timeout: 60000 });
   if (idx.status !== 0) failed.push("索引刷新失败");
-  const rl = spawnSync(NODE_BIN, [join(ROOT, "memory-cli.js"), "relink", "--root", ROOT], { encoding: "utf8", timeout: 60000 });
+  const rl = spawnSync(NODE_BIN, [join(ENGINE_ROOT, "memory-cli.js"), "relink", "--root", ROOT], { encoding: "utf8", timeout: 60000 });
   if (rl.status !== 0) failed.push("链接图刷新失败");
-  const eb = spawnSync(NODE_BIN, [join(ROOT, "embed.js"), "build", "--root", ROOT], { encoding: "utf8", timeout: 300000 });
+  const eb = spawnSync(NODE_BIN, [join(ENGINE_ROOT, "embed.js"), "build", "--root", ROOT], { encoding: "utf8", timeout: 300000 });
   if (eb.status !== 0) failed.push("语义索引刷新失败（模型缺失可忽略，纯 BM25 不受影响）");
   return failed;
 }
 
 function main() {
-  // P1-6(2026-08-29):--all 扫全部 daily——非 ZCode 通道(proma/session adapter)摄取历史会话后
+  // P1-6：--all 扫全部 daily——非单日接入端摄取历史会话后
   //   调用,决策行散布多天,单日模式会漏;幂等(内容键)保证重跑安全。
   if (process.argv.includes("--all")) {
     // 已蒸馏日期守卫(2026-08-29):≤ manifest.lastRun 的 daily 已由蒸馏档案承载,重复建卡=兄弟卡循环(实测每轮+19 张)

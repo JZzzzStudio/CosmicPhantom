@@ -13,8 +13,24 @@ for (const dir of ["memories", "candidates", "daily", "backup", "lib"]) fs.mkdir
 for (const file of [
   "memory-cli.js", "memory-domains.js", "memory-retrieval.js", "validate.js", "candidates.js", "package.json",
   "link-graph.js", "skills-sync.js", "inject.js", "identity-card.js", "inject-config.js", "inject.config.json",
-  "current-state.js", "current-state.json", "reply-policy.json", "resume-context.js", "MEMORY.md",
+  "current-state.js", "reply-policy.json", "resume-context.js",
 ]) fs.copyFileSync(path.join(REAL, file), path.join(ROOT, file));
+fs.writeFileSync(path.join(ROOT, "current-state.json"), JSON.stringify({
+  schemaVersion: 1,
+  revision: 1,
+  updatedAt: "2026-01-01T00:00:00.000Z",
+  updatedBy: "public-test",
+  source: "synthetic fixture",
+  status: "active",
+  objective: "verify domain isolation",
+  summary: "public synthetic state",
+  completed: [],
+  nextActions: [],
+  blockers: [],
+  decisions: [],
+  workingFiles: [],
+  verification: [],
+}, null, 2) + "\n", "utf8");
 fs.copyFileSync(path.join(REAL, "lib", "failopen.js"), path.join(ROOT, "lib", "failopen.js"));
 
 const legacyMemory = path.join(ROOT, "memories", "legacy.md");

@@ -29,9 +29,9 @@
  */
 import { readFileSync, readdirSync, existsSync, statSync, appendFileSync, writeFileSync } from "node:fs";
 import { listMemoryEntries } from "../../memory-retrieval.js";
-import { join, resolve, dirname, sep, isAbsolute } from "node:path";
+import { join, resolve, dirname, sep } from "node:path";
 import { homedir } from "node:os";
-import { spawnSync, spawn } from "node:child_process";
+import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { loadCurrentState, updateCurrentState } from "../../current-state.js";
 
@@ -50,7 +50,6 @@ const MEM_DIR = join(ROOT, "memories");
 const CLI = join(ENGINE_ROOT, "memory-cli.js");
 const RESUME_CONTEXT = join(ENGINE_ROOT, "resume-context.js");
 const EVENTS = join(ENGINE_ROOT, "events.js");
-const DEFAULT_WATCH_SCRIPT = join(ENGINE_ROOT, "scripts", "legacy", "hermes", "watch-state.js");
 const NODE = existsSync(join(ENGINE_ROOT, "tools", "node", "node.exe")) ? join(ENGINE_ROOT, "tools", "node", "node.exe") : process.execPath;
 const VALID_STATUS = ["🟢当前", "⏳待验证", "🔜计划", "🕰️过去"];   // ⏳=待验证池（2026-08-28）
 
@@ -66,54 +65,6 @@ function logMCP(m) {
     try { if (statSync(f).size > 524288) { const lines = readFileSync(f, "utf8").split("\n"); writeFileSync(f, lines.slice(Math.floor(lines.length / 2)).join("\n"), "utf8"); } } catch {}
     appendFileSync(f, `[${new Date().toISOString()}] mcp: ${m}\n`);
   } catch {}
-}
-
-// ---------- 守护自动拉起（D18：对话开始时自动启动，不是 Windows 启动）----------
-// MCP server 生命周期 = Hermes 会话连接（对话开始）——启动时拉起写强制守护；
-// 幂等由 watch-state.js 单实例保护保证（已有实例则新进程自行退出）
-function readStateDbPath() {
-  try {
-    const p = join(ROOT, "state-db-path.txt");
-    if (existsSync(p)) { const t = readFileSync(p, "utf8").trim(); if (t) return t; }
-  } catch {}
-  return null;
-}
-function ensureWatcher() {
-  try {
-    // 暂停开关（2026-08-09 用户指令：弹窗根因确认前暂停自动拉起）：
-    // 系统根存在 .watch-paused 标记 → 不拉起 watcher（恢复=删除标记，无需改代码）
-    if (existsSync(join(ROOT, ".watch-paused"))) {
-      // 2026-11-18 S3：暂停是设计状态，不再往 hook-errors.log 写“假错误”（真错误会被淹没）
-    if (process.env.CP_DEBUG_WATCHER === "1") logMCP("watcher paused (.watch-paused)");
-      return;
-    }
-    // 测试/部署可覆盖（K32/K40 纪律：经 MCP 的测试输入必须零副作用——测试用环境变量指向沙箱）
-    const script = process.env.CP_WATCH_SCRIPT || DEFAULT_WATCH_SCRIPT;
-    const db = process.env.CP_WATCH_DB || readStateDbPath();
-    // K40：--root 必须透传——测试覆盖指向沙箱 script 时若缺 --root，守护会回退生产根 → 测试数据写生产
-    const root = process.env.CP_WATCH_ROOT || ROOT;
-    // 评审小修 2：显式绝对路径检查——相对路径一律拒绝（即使文件真实存在）
-    if (!db || !isAbsolute(db) || !existsSync(db)) { logMCP(`守护未拉起：state.db 路径缺失/非绝对路径/不存在（${db || "空"}；检查 state-db-path.txt）`); return; }
-    if (!existsSync(script)) { logMCP(`守护未拉起：watch-state.js 不存在（${script}）`); return; }
-    const args = ["--experimental-sqlite", script, "--db", db, "--root", root];
-    const child = spawn(NODE, args, { detached: true, stdio: "ignore", windowsHide: true });
-    child.unref();   // 守护独立于 MCP 进程生命周期
-    logMCP(`已请求拉起守护（${script} --db ${db} --root ${root}；单实例保护去重）`);
-  } catch (e) { logMCP(`守护拉起失败（fail-open，不影响 MCP 服务）: ${e.message}`); }
-}
-
-// ---------- 弹窗灭灯器（2026-08-13 实装）----------
-// 根因实证：ZCode 对 hooks/MCP/shell 子进程一律 windowsHide:true，本栈不产生可见窗口；
-// 弹窗 = 第三方（易游网维/嘟嘟牛计费/Steam++ 等）程序化拉起 Windows Terminal(-Embedding/DCOM)
-// 与日志控制台。灭灯器只隐藏窗口不杀进程，单实例保护，ZCode 退出 5 分钟后自停（不开机自启）。
-function ensureWindowGuard() {
-  try {
-    const guard = join(ROOT, "tools", "window-guard.ps1");
-    if (!existsSync(guard)) { logMCP("灭灯器脚本缺失，跳过"); return; }
-    const g = spawn("powershell", ["-NoProfile", "-ExecutionPolicy", "Bypass", "-WindowStyle", "Hidden", "-File", guard, "-Root", ROOT], { detached: true, stdio: "ignore", windowsHide: true });
-    g.unref();
-    logMCP("弹窗灭灯器已拉起（第三方程序化 Terminal 直接关闭 / 日志控制台自动隐藏；v3 轮询，本机 WMI 事件通道失效故不用事件驱动）");
-  } catch (e) { logMCP(`灭灯器拉起失败（fail-open，不影响 MCP 服务）: ${e.message}`); }
 }
 
 function callCli(args) {
@@ -440,15 +391,23 @@ function buildInstructions() {
     if (st.summary) parts.push(`现状: ${st.summary}`);
     if (Array.isArray(st.nextActions) && st.nextActions.length) parts.push(`下一步: ${st.nextActions.slice(0, 2).join(" / ")}`);
     if (Array.isArray(st.decisions) && st.decisions.length) parts.push(`最近决策: ${st.decisions.slice(-2).join(" / ")}`);
-  } catch {}
+  } catch (error) {
+    parts.push(`接力状态读取失败: ${String(error.message || error).slice(0, 160)}`);
+  }
   try {
     const r = spawnSync(NODE, ["--experimental-sqlite", EVENTS, "coverage", "--root", ROOT], { encoding: "utf8", timeout: 20000 });
-    if (r.status === 0) {
-      const j = JSON.parse((r.stdout || "").split("\n").filter(Boolean).pop() || "{}");
-      const bad = (j.gaps || []).filter(g => g.gap !== null && g.gap > 1).map(g => `${g.name}(${g.gap})`).join("、");
+    if (r.status !== 0 || r.error) {
+      parts.push(`吸收覆盖率读取失败: ${String(r.error?.message || r.stderr || `退出码 ${r.status}`).trim().replace(/\s+/g, " ").slice(0, 160)}`);
+    } else {
+      const raw = (r.stdout || "").split("\n").filter(Boolean).pop() || "";
+      const j = JSON.parse(raw);
+      if (!Number.isFinite(j.aligned) || !Number.isFinite(j.checked) || !Array.isArray(j.gaps)) throw new Error("覆盖率输出缺少完整字段");
+      const bad = j.gaps.filter(g => g.gap !== null && g.gap > 1).map(g => `${g.name}(${g.gap})`).join("、");
       parts.push(`吸收: ${j.aligned}/${j.checked} 源对齐${bad ? `；缺口 ${bad}` : ""}`);
     }
-  } catch {}
+  } catch (error) {
+    parts.push(`吸收覆盖率读取失败: ${String(error.message || error).slice(0, 160)}`);
+  }
   // daily/events are evidence-layer data. MCP initialize is a default system-prompt
   // surface, so it must not replay raw user decisions before candidate confirmation.
   return parts.join("\n");
@@ -500,8 +459,6 @@ function handle(method, params, id) {
 
 // 逐行读 stdin（MCP stdio 传输：每条消息一行 JSON）
 import { createInterface } from "node:readline";
-ensureWatcher();   // D18: MCP connection starts the watcher
-ensureWindowGuard();   // 2026-08-13：弹窗灭灯器（第三方程序化 Terminal/控制台窗口自动隐藏，跟会话走不开机自启）
 const rl = createInterface({ input: process.stdin, crlfDelay: Infinity });
 rl.on("line", (line) => {
   const t = line.trim();

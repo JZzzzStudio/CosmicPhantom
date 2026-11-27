@@ -35,7 +35,13 @@ import { homedir } from "node:os";
 import { createHash, randomUUID } from "node:crypto";
 import { DatabaseSync } from "node:sqlite";
 
-const ROOT = process.argv.includes("--root") ? process.argv[process.argv.indexOf("--root") + 1] : join(homedir(), ".cosmic-phantom");
+function resolveRoot(argv = process.argv) {
+  const index = argv.indexOf("--root");
+  const explicit = index >= 0 ? argv[index + 1] : undefined;
+  const value = explicit || process.env.CP_ROOT || join(homedir(), ".cosmic-phantom");
+  return String(value);
+}
+const ROOT = resolveRoot();
 const EVENTS_DB = join(ROOT, "events.db");
 const DAILY_DIR = join(ROOT, "daily");
 const PROJECTION_LOCK = join(ROOT, ".cp-projection.lock");
@@ -89,6 +95,7 @@ function markerTokens(text) {
 }
 
 function openDb() {
+  mkdirSync(ROOT, { recursive: true });
   const db = new DatabaseSync(EVENTS_DB);
   // 并发防护（2026-08-28 外审预检）：events.db 有 5 个写入方（Stop hook/MCP/双 adapter/维护），
   //   默认 busy_timeout=0 → 并发收尾即 SQLITE_BUSY 崩、丢写。5s 等锁是纯收益。
@@ -230,7 +237,9 @@ function ensureInstance(db, srcDb) {
 //   C 方案修正(2026-08-29 WB 事故):写入侧 instance 恒守约定(manual 池为对账锚点,还原 WB 的
 //   写入侧改动),通道精确化只在展示层——instance=manual 且 session 带 session- 前缀 = 经
 //   session-adapter 手动落盘的宿主会话,标 SessionAdapter;纯 manual(无前缀)= 通用手动落盘。
-function channelName(instance, session) {
+function channelName(instance, session, sourceKind) {
+  const explicit = String(sourceKind || "").trim();
+  if (explicit) return explicit;
   const s = String(instance || "");
   if (s === "manual" && String(session || "").startsWith("session-")) return "SessionAdapter";
   if (s.startsWith("zcode")) return "ZCode";
@@ -239,6 +248,15 @@ function channelName(instance, session) {
   if (s.startsWith("session-")) return "SessionAdapter";
   if (s === "manual") return "Manual";
   return s || "未知";
+}
+
+// 仅过滤投影层的宿主注入文本；events 表始终保留原始 content。
+function filterProjectedUserText(value) {
+  const text = String(value || "");
+  if (/^Base directory for this skill:/.test(text.trim())) return null;
+  if (!text.includes("<system-reminder")) return text;
+  const match = text.match(/<user_query>([\s\S]*?)<\/user_query>/);
+  return match ? match[1] : null;
 }
 
 // P1-5(2026-08-29):proma midCheck 的 mid 口径=内容 hash。规格与 proma-adapter.js hashMid
@@ -383,35 +401,38 @@ function projectInternal() {
       const title = String(sid).replace(/^session-/, "").split("-").slice(-2).join("-") || String(sid);
       // 通道标注(2026-08-29 溯源优化):段头显示写入通道(instance→宿主名),回答"这条由谁写入"。
       //   真源仍是 events.instance,此处仅投影展示;同组按 fresh[0] 取(同 session 同宿主)。
-      const channel = channelName(fresh[0].instance, sid);
+      const channel = channelName(fresh[0].instance, sid, fresh[0].source_kind);
       let block = `## 会话 ${title}（${fresh[0].ts}）· 通道：${channel}\n<!-- cp-evt: ${marks.join(" ")} -->\n`;
+      let rendered = 0;
       for (const e of fresh) {
         if (e.role === "user") {
-          let text = e.content || "";
+          const text = filterProjectedUserText(e.content);
+          if (text === null) { skipped += 1; continue; }
           // R1（2026-09-16 用户拍板）：宿主调用技能时会往对话塞 "Base directory for this skill: …"
           //   那**不是用户说的话**，却被落盘管道当成用户原话记入（同族先例见上方 <system-reminder 分支）。
           //   实证：events.db:5336 与 5360 均为该前缀、role=user —— 每调一次技能漏一条。
           //   仅过滤"投影层"（daily 行与由此派生的决策卡）；原始事件保留，改动不触及真源写入。
-          if (/^Base directory for this skill:/.test(text.trim())) { skipped += 1; continue; }
-          if (text.includes("<system-reminder")) {
-            const m = text.match(/<user_query>([\s\S]*?)<\/user_query>/);
-            if (!m) { skipped += 1; continue; }
-            text = m[1];
-          }
           block += (DECISION.test(text) ? "- **⭐👤 用户（决策）**：" : "- 👤 用户：") + text + "\n";
+          rendered += 1;
         } else if (e.role === "tool" && WRITE_TOOLS.test(e.tool_name || "")) {
           block += `- [工具] ${e.tool_name} (ok)\n`;
         } else if (e.role === "assistant" && e.content) {
           const c = String(e.content);
-          if (c.includes("[摘要]")) block += `- [摘要] ${c}\n`;
-          else if (c.trim().startsWith("🛠️")) block += `- **🛠️ Agent（成果）**：${c.trim().replace(/^🛠️\s*/, "")}\n`;
+          if (c.includes("[摘要]")) { block += `- [摘要] ${c}\n`; rendered += 1; }
+          else if (c.trim().startsWith("🛠️")) { block += `- **🛠️ Agent（成果）**：${c.trim().replace(/^🛠️\s*/, "")}\n`; rendered += 1; }
           else {
             // D-05（2026-10-28）：Proma 等宿主的回复是一大段文本，成果行未必在开头。
             //   只提取“行首 🛠️ + 非空”的短行（32-300 字），最多 3 条；避免表格/代码示例误收。
             const hits = c.split(/\r?\n/).map(line => line.trim()).filter(line => /^🛠️\s+\S/.test(line) && line.length >= 32 && line.length <= 300).slice(0, 3);
             for (const h of hits) block += `- **🛠️ Agent（成果）**：${h.replace(/^🛠️\s*/, "")}\n`;
+            if (hits.length) rendered += 1;
           }
         }
+      }
+      if (rendered === 0) {
+        skipped += fresh.length;
+        for (const e of fresh) insP.run(e.id);
+        continue;
       }
       block += "---\n";
       try {
@@ -806,14 +827,14 @@ function coverageInternal() {
 function localSourceRoot() {
   if (process.env.CP_SOURCE_ROOT) return String(process.env.CP_SOURCE_ROOT);
   try {
-    const root = process.env.CP_ROOT || join(homedir(), ".cosmic-phantom");
-    const h = createHash("sha256").update(String(root).toLowerCase()).digest("hex").slice(0, 8);
+    const h = createHash("sha256").update(String(ROOT).toLowerCase()).digest("hex").slice(0, 8);
     return (process.env.COMPUTERNAME || process.env.HOSTNAME || "host") + ":" + h;
   } catch { return null; }
 }
 
 // 票 19：同一会话里，来自几个不同来源根（>1 才算“多源佐证”）
 function independenceInternal(session) {
+  if (!existsSync(EVENTS_DB)) return { error: "events.db 不存在（尚未摄取）" };
   const db = openDb();
   try {
     const sql = session
@@ -829,6 +850,7 @@ function independenceInternal(session) {
 
 // 票 10：冷热分层只做体检与导出，不删真源（只增不改）。
 function tiersInternal() {
+  if (!existsSync(EVENTS_DB)) return { error: "events.db 不存在（尚未摄取）" };
   const db = openDb();
   try {
     const now = Date.now();
@@ -907,9 +929,11 @@ function redactInternal(mid, reason, targetInstance) {
 // 票 10「推送后禁止整理」：数据仓一旦推到远端，改写真源会让别的机器对不上账。
 //   判据：cp-memory 有 upstream 且本地没有领先提交 = 已推送 → purge 必须显式 --allow-after-push。
 function dataRepoPushed() {
-  const dir = process.env.CP_DATA_DIR || join(homedir(), "cp-memory");
+  const configured = process.env.CP_DATA_DIR;
+  if (!configured) return { pushed: false, reason: "未配置 CP_DATA_DIR，跳过数据仓检查" };
+  const dir = String(configured);
   try {
-    if (!existsSync(join(dir, ".git"))) return { pushed: false, reason: "数据仓不在本机" };
+    if (!existsSync(join(dir, ".git"))) return { pushed: false, reason: "数据仓不在本机", dir };
     execFileSync("git", ["-C", dir, "rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"], { stdio: "ignore", timeout: 15000 });
     const ahead = Number(execFileSync("git", ["-C", dir, "rev-list", "--count", "@{u}..HEAD"], { encoding: "utf8", timeout: 15000 }).trim());
     return { pushed: Number.isFinite(ahead) && ahead === 0, ahead, dir };
@@ -1060,6 +1084,7 @@ function extractIndex(content, terms) {
   };
 }
 function buildEventIndex() {
+  if (!existsSync(EVENTS_DB)) return { error: "events.db 不存在（尚未摄取）" };
   const db = openDb();
   try {
     const terms = loadContextTerms();
@@ -1285,7 +1310,12 @@ switch (cmd) {
     out({ source: "state.db", instance: r1.instance, cursor: r1.cursor, wrote: r1.ingested, projection: { ok: true, projected: r2.projected || 0, skipped: r2.skipped || 0 }, endedNew: r1.endedNew, endedSemantic: r1.endedSemantic, at: r1.at });
     break;
   }
-  case "status": out(statusInternal()); break;
+  case "status": {
+    const result = statusInternal();
+    out(result);
+    if (result.error) process.exitCode = 1;
+    break;
+  }
   case "source-identity": {
     const result = sourceIdentityInternal(args.includes("--repair"));
     out(result);
@@ -1298,10 +1328,30 @@ switch (cmd) {
     if (result.error || result.refused || result.ok === false) process.exitCode = 1;
     break;
   }
-  case "tiers": out(tiersInternal()); break;
-  case "independence": out(independenceInternal(get("--session"))); break;
-  case "expand": out(expandInternal()); break;
-  case "coverage": out(coverageInternal()); break;
+  case "tiers": {
+    const result = tiersInternal();
+    out(result);
+    if (result.error) process.exitCode = 1;
+    break;
+  }
+  case "independence": {
+    const result = independenceInternal(get("--session"));
+    out(result);
+    if (result.error) process.exitCode = 1;
+    break;
+  }
+  case "expand": {
+    const result = expandInternal();
+    out(result);
+    if (result.error) process.exitCode = 1;
+    break;
+  }
+  case "coverage": {
+    const result = coverageInternal();
+    out(result);
+    if (result.error) process.exitCode = 1;
+    break;
+  }
   case "purge": {
     const result = purgeInternal(get("--before"), args.includes("--sensitive-only"), { confirm: args.includes("--confirm"), reason: get("--reason"), allowAfterPush: args.includes("--allow-after-push") });
     out(result);
@@ -1326,5 +1376,5 @@ switch (cmd) {
     if (result.error) process.exitCode = 1;
     break;
   }
-  default: out({ usage: "poll|ingest|ingest-normalized|project|status|source-identity|independence|redact|tiers|expand|coverage|purge|export" });
+  default: out({ usage: "poll|ingest|ingest-normalized|project|status|source-identity|independence|redact|tiers|expand|coverage|purge|export" }); process.exitCode = 1;
 }

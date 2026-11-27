@@ -6,7 +6,7 @@ const { execSync } = require('node:child_process');
 const fs = require('node:fs');
 
 const RULES = [
-  { name: '绝对路径(C:/Users)', re: /C:[\\/]Users[\\/][A-Za-z0-9._-]+/i },
+  { name: '绝对路径(C:/Users)', re: /C:[\\/]+Users[\\/]+[A-Za-z0-9._-]+/i },
   { name: '绝对路径(/c/Users)', re: /\/c\/Users\/[A-Za-z0-9._-]+/i },
   { name: '绝对路径(/Users)', re: /\/Users\/[A-Za-z0-9._-]+\/(Desktop|Documents|Downloads|\.cosmic)/ },
   { name: '主机名(旧用户名)', re: new RegExp('\\bAdmin' + 'istrator\\b') },

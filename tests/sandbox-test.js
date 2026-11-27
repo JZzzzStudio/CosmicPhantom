@@ -2,17 +2,18 @@
 // 机制：覆盖 USERPROFILE 指向临时沙箱 home → 所有脚本 ROOT 自动指向沙箱（零代码侵入）
 // 正向：add→查重→search→inject→log(落盘+幂等)→index/verify/stats/distill→CLI转发→MCP
 // 逆向：validate 拒写×3 / add 过短拒 / 空库 fail-open / 无 transcript fail-open / 缺参 fail-open / 空查询报错 / MCP 未知工具
-const { spawnSync, execFileSync } = require("node:child_process");
+const { spawnSync } = require("node:child_process");
+const crypto = require("node:crypto");
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
+const { writePublicState, writePublicMemory, writePublicContext, writePublicCore } = require("./fixtures/public-fixtures.cjs");
 
-const REAL_ROOT = path.join(os.homedir(), ".cosmic-phantom");
-const NODE = path.join(REAL_ROOT, "tools", "node", "node.exe");
+const REAL_ROOT = path.resolve(__dirname, "..");
+const NODE = process.execPath;
 const SB = fs.mkdtempSync(path.join(os.tmpdir(), "hermes-sandbox-"));
-const SB_HOME = path.join(SB, "home");
-const SB_ROOT = path.join(SB_HOME, ".cosmic-phantom");
-const ENV = { ...process.env, USERPROFILE: SB_HOME, CP_ROOT: SB_ROOT };
+const SB_ROOT = path.join(SB, "root");
+const ENV = { ...process.env, CP_ROOT: SB_ROOT };
 
 let pass = 0, fail = 0;
 function check(name, cond, detail) {
@@ -20,7 +21,7 @@ function check(name, cond, detail) {
   else { fail++; console.log(`  [FAIL] ${name} -- ${detail || ""}`); }
 }
 function run(script, args, opts = {}) {
-  const r = spawnSync(NODE, [path.join(SB_ROOT, script), ...args], { encoding: "utf8", timeout: 30000, env: ENV, ...opts });
+  const r = spawnSync(NODE, [path.join(SB_ROOT, script), ...args, "--root", SB_ROOT], { encoding: "utf8", timeout: 30000, env: ENV, ...opts });
   return { ok: r.status === 0, out: r.stdout || "", err: r.stderr || "", status: r.status };
 }
 function runNode(args, opts = {}) {
@@ -30,18 +31,26 @@ function runNode(args, opts = {}) {
 
 // ---------- 沙箱搭建 ----------
 console.log("=== 沙箱搭建 ===");
-for (const d of ["memories", "candidates", "daily", "topics", "distilled", "pro", "backup", "resources/mcp-server"]) {
+for (const d of ["memories", "candidates", "daily", "topics", "distilled", "pro", "backup", "resources/mcp-server", "scripts/legacy/hermes", "core", ".context", "lib", "eval"]) {
   fs.mkdirSync(path.join(SB_ROOT, d), { recursive: true });
 }
-execFileSync("cmd", ["/c", "mklink", "/J", path.join(SB_ROOT, "tools"), path.join(REAL_ROOT, "tools")], { stdio: "ignore" });
-for (const f of ["inject.js", "identity-card.js", "inject-config.js", "inject.config.json", "MEMORY.md", "current-state.js", "current-state.json", "resume-context.js", "reply-policy.json", "resume-manifest.json", "log_turn.js", "validate.js", "link-graph.js", "skills-sync.js", "memory-cli.js", "memory-retrieval.js", "candidates.js", "lib/failopen.js", "events.js", "resources/mcp-server/index.js", "package.json"]) {
+const SOURCES = ["inject.js", "identity-card.js", "inject-config.js", "inject.config.json", "current-state.js", "resume-context.js", "reply-policy.json", "log_turn.js", "validate.js", "link-graph.js", "skills-sync.js", "memory-cli.js", "memory-retrieval.js", "candidates.js", "lib/failopen.js", "events.js", "resources/mcp-server/index.js", "package.json"];
+for (const f of SOURCES) {
   fs.mkdirSync(path.dirname(path.join(SB_ROOT, f)), { recursive: true });
   fs.copyFileSync(path.join(REAL_ROOT, f), path.join(SB_ROOT, f));
 }
 const legacyPoll = "scripts/legacy/hermes/poll-state.js";
-fs.mkdirSync(path.dirname(path.join(SB_ROOT, legacyPoll)), { recursive: true });
 fs.copyFileSync(path.join(REAL_ROOT, legacyPoll), path.join(SB_ROOT, legacyPoll));
-check("沙箱就绪（USERPROFILE 覆盖生效）", os.homedir() !== SB_HOME && fs.existsSync(path.join(SB_ROOT, "tools", "node", "node.exe")), SB_ROOT);
+fs.mkdirSync(path.join(SB_ROOT, "tools", "node"), { recursive: true });
+fs.copyFileSync(process.execPath, path.join(SB_ROOT, "tools", "node", "node.exe"));
+writePublicState(SB_ROOT);
+writePublicMemory(SB_ROOT);
+writePublicContext(SB_ROOT);
+writePublicCore(SB_ROOT);
+const manifestSources = ["core/rules.md", "core/reply-style.md", "reply-policy.json", ".context/CONTEXT.md", "MEMORY.md"];
+const sources = Object.fromEntries(manifestSources.map((f) => [f, crypto.createHash("sha256").update(fs.readFileSync(path.join(SB_ROOT, f))).digest("hex")]));
+fs.writeFileSync(path.join(SB_ROOT, "resume-manifest.json"), JSON.stringify({ schemaVersion: 1, policyRevision: 2, stateFile: "current-state.json", policyFile: "reply-policy.json", sources, status: "fresh" }, null, 2));
+check("沙箱就绪（临时 root + 当前 Node）", fs.existsSync(path.join(SB_ROOT, "tools", "node", "node.exe")) && fs.existsSync(path.join(SB_ROOT, "current-state.json")), SB_ROOT);
 
 console.log("\n=== A. 正向链路 ===");
 // A1 空库 fail-open（先测空库再写入）
@@ -98,7 +107,7 @@ fs.writeFileSync(mcpIn, [
   '{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"list_candidates","arguments":{}}}',
   '{"jsonrpc":"2.0","id":5,"method":"tools/call","params":{"name":"verify_memory","arguments":{}}}',
 ].join("\n") + "\n");
-r = runNode([path.join(SB_ROOT, "resources", "mcp-server", "index.js")], { input: fs.readFileSync(mcpIn, "utf8") });
+r = runNode([path.join(SB_ROOT, "resources", "mcp-server", "index.js"), "--root", SB_ROOT], { input: fs.readFileSync(mcpIn, "utf8") });
 // tools/call returns JSON text inside JSON-RPC JSON, so nested quotes are escaped once.
 check("A17 MCP 握手+检索+候选写入+审计", r.ok && r.out.includes("serverInfo") && r.out.includes("中文") && r.out.includes('\\"added\\": true') && r.out.includes('\\"state\\": \\"candidate\\"') && r.out.includes("noiseRate"), r.out.slice(-1200));
 
@@ -127,7 +136,7 @@ r = runNode(["--experimental-sqlite", path.join(SB_ROOT, "scripts", "legacy", "h
 check("B6 poll-state 缺 db fail-open", r.ok, r.err.slice(0, 80));
 // B7 MCP 未知工具 → isError
 fs.writeFileSync(mcpIn, '{"jsonrpc":"2.0","id":9,"method":"tools/call","params":{"name":"hack_tool","arguments":{}}}\n');
-r = runNode([path.join(SB_ROOT, "resources", "mcp-server", "index.js")], { input: fs.readFileSync(mcpIn, "utf8") });
+r = runNode([path.join(SB_ROOT, "resources", "mcp-server", "index.js"), "--root", SB_ROOT], { input: fs.readFileSync(mcpIn, "utf8") });
 check("B7 MCP 未知工具 isError", r.out.includes('"isError":true'), r.out.slice(0, 120));
 // B8 路径穿越尝试（store_memory scope 枚举白名单）
 r = run("memory-cli.js", ["add", "越界测试内容", "--scope", "../../../evil"]);

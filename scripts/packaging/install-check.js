@@ -92,9 +92,9 @@ const checks = [];
 {
   const syncRes = checkSkillSync(ROOT, HOME);
   const failed = syncRes.filter((r) => !r.ok);
-  const hosts = [...new Set(syncRes.map((r) => r.host))].join("/");
+  const mounts = [...new Set(syncRes.map((r) => r.mount))].join("/");
   checks.push(check("skills-挂载位一致", failed.length === 0,
-    failed.length ? failed.map((f) => `${f.host}/${f.skill}: ${f.detail}`).join("; ") : `${syncRes.length} 项全一致（${hosts}）`));
+    failed.length ? failed.map((f) => `${f.mount}/${f.skill}: ${f.detail}`).join("; ") : (syncRes.length ? `${syncRes.length} 项全一致（${mounts}）` : "未声明 skill-mounts.json，跳过挂载检查")));
 }
 
 // 1d. Claude Code（主宿主，2026-09-16 加项）：盲区账本 B-004 —— 此前主宿主的两处接入件

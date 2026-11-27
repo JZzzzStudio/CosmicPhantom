@@ -6,8 +6,8 @@ const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
 
-const REAL = path.join(os.homedir(), ".cosmic-phantom");
-const NODE = path.join(REAL, "tools", "node", "node.exe");
+const REAL = path.resolve(__dirname, "..");
+const NODE = process.execPath;
 const SB = fs.mkdtempSync(path.join(os.tmpdir(), "cp-bucket-"));
 const ROOT = path.join(SB, "root");
 const MEM = path.join(ROOT, "memories");

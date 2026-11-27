@@ -3,6 +3,7 @@ const { spawnSync } = require("node:child_process");
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
+const { writePublicState, writePublicMemory } = require("./fixtures/public-fixtures.cjs");
 
 const REAL = path.resolve(__dirname, "..");
 const NODE = process.execPath;
@@ -12,9 +13,11 @@ for (const dir of ["memories", "candidates", "daily", "backup", "lib"]) fs.mkdir
 for (const file of [
   "memory-cli.js", "memory-retrieval.js", "validate.js", "candidates.js", "package.json",
   "link-graph.js", "skills-sync.js", "inject.js", "identity-card.js", "inject-config.js",
-  "inject.config.json", "current-state.js", "current-state.json", "reply-policy.json",
-  "resume-context.js", "MEMORY.md",
+  "inject.config.json", "current-state.js", "reply-policy.json",
+  "resume-context.js",
 ]) fs.copyFileSync(path.join(REAL, file), path.join(ROOT, file));
+writePublicState(ROOT);
+writePublicMemory(ROOT);
 fs.copyFileSync(path.join(REAL, "lib", "failopen.js"), path.join(ROOT, "lib", "failopen.js"));
 
 const PENDING = "SURFACE_PENDING_candidate_must_not_appear";

@@ -85,7 +85,9 @@
         "--experimental-sqlite",
         "<USER_HOME>/.cosmic-phantom/zcode-flush.cjs",
         "--root",
-        "<USER_HOME>/.cosmic-phantom"
+        "<USER_HOME>/.cosmic-phantom",
+        "--zcode-db",
+        "<USER_HOME>/.zcode/cli/db/db.sqlite"
        ],
        "timeoutMs": 20000
       }

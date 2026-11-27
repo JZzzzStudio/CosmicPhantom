@@ -34,13 +34,13 @@ function cli(args, extra = {}) {
   try { out = JSON.parse((r.stdout || "").trim() || "{}"); } catch {}
   return { status: r.status, out, text: r.stdout || r.stderr || "" };
 }
-function rpc(messages) {
+function rpc(messages, extraEnv = {}) {
   const input = messages.map((request, i) => JSON.stringify({
     jsonrpc: "2.0", id: i + 1,
     method: request.method || "tools/call",
     params: request.method ? (request.params || {}) : request,
   })).join("\n") + "\n";
-  const r = spawnSync(NODE, [path.join(ENGINE, "resources/mcp-server/index.js"), "--root", ROOT], { input, encoding: "utf8", timeout: 60000, env: { ...process.env, CP_WATCH_SCRIPT: path.join(SB, "missing-watch.js") } });
+  const r = spawnSync(NODE, [path.join(ENGINE, "resources/mcp-server/index.js"), "--root", ROOT], { input, encoding: "utf8", timeout: 60000, env: { ...process.env, CP_WATCH_SCRIPT: path.join(SB, "missing-watch.js"), ...extraEnv } });
   return { status: r.status, rows: (r.stdout || "").trim().split("\n").filter(Boolean).map(line => JSON.parse(line)), stderr: r.stderr || "" };
 }
 function text(row) { return row?.result?.content?.[0]?.text || ""; }
@@ -52,6 +52,33 @@ const toolNames = listedTools.rows[0]?.result?.tools?.map((tool) => tool.name) |
 check("tools/list runs from packed engine with instance root", listedTools.status === 0 && toolNames.includes("candidate_source") && toolNames.includes("confirm_candidates"), JSON.stringify(listedTools.rows[0]));
 const initialized = rpc([{ method: "initialize", params: { protocolVersion: "2024-11-05" } }]);
 check("MCP initialize excludes daily raw decision text", !String(initialized.rows[0]?.result?.instructions || "").includes("MCP_INIT_DAILY_RAW_MUST_STAY_HIDDEN"), JSON.stringify(initialized.rows[0]));
+
+const initFailureRoot = path.join(SB, "init-failure-instance");
+fs.mkdirSync(initFailureRoot, { recursive: true });
+const initFailure = spawnSync(NODE, [path.join(ENGINE, "resources/mcp-server/index.js"), "--root", initFailureRoot], {
+  input: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: "2024-11-05" } }) + "\n",
+  encoding: "utf8",
+  timeout: 60000,
+  env: { ...process.env },
+});
+let initFailureRow = {};
+try { initFailureRow = JSON.parse((initFailure.stdout || "").trim().split("\n").at(-1) || "{}"); } catch {}
+const initFailureText = String(initFailureRow.result?.instructions || "");
+check("MCP initialize exposes missing state and coverage failures", initFailure.status === 0 && initFailureText.includes("接力状态读取失败") && initFailureText.includes("吸收覆盖率读取失败"), initFailureText);
+
+// Initialization must be a request-scoped protocol operation: no watcher, shell, or
+// background process may start as a side effect. CLI forwarding remains allowed.
+const processAudit = path.join(SB, "mcp-process-audit.jsonl");
+const audited = rpc([
+  { method: "initialize", params: { protocolVersion: "2024-11-05" } },
+  { name: "recall_memory", arguments: { query: "MCP side effect audit token" } },
+], { CP_PROCESS_AUDIT_LOG: processAudit, NODE_OPTIONS: `--require=${path.join(REAL, "tests/fixtures/mcp-process-audit.cjs")}` });
+let processRows = [];
+try { processRows = fs.readFileSync(processAudit, "utf8").trim().split("\n").filter(Boolean).map((line) => JSON.parse(line)); } catch {}
+const processText = JSON.stringify(processRows).toLowerCase();
+const forwardedSearch = processRows.some((row) => row.method === "spawnSync" && row.args?.some((arg) => String(arg).toLowerCase().endsWith("memory-cli.js")) && row.args?.includes("search"));
+check("MCP initialize launches no watcher, shell, or background process", audited.status === 0 && !processRows.some((row) => ["spawn", "exec", "execFile", "fork"].includes(row.method)) && !/(powershell|pwsh|watch-state|missing-watch\.js|cp_watch_script)/i.test(processText), JSON.stringify(processRows));
+check("MCP CLI forwarding remains available", forwardedSearch && text(audited.rows[1]).length > 0, JSON.stringify({ audit: processRows, response: text(audited.rows[1]) }));
 
 // Create real events.db anchors through the engine, while keeping the instance root free of engine files.
 const transcript = path.join(SB, "source.jsonl");
