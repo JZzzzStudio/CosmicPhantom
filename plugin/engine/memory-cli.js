@@ -42,6 +42,8 @@ let legacyCompat = null;
 try { ({ inspectLegacyLayout: legacyCompat } = await import("./legacy-memory-compat.js")); } catch {}
 let memoryDomains = null;
 try { memoryDomains = await import("./memory-domains.js"); } catch {}
+let memoryFeedback = null;
+try { memoryFeedback = await import("./lib/memory-feedback.js"); } catch {}
 import { summarize as failopenSummarize, FAILOPEN_THRESHOLDS } from "./lib/failopen.js";
 // F23 单实现：lib/verify-absorbed.js。沙箱测试可能只复制根文件而不带 lib/，
 //   故用动态导入 + fail-open（缺失时 F23 跳过，不阻塞其他命令）；生产根有 lib，正常。
@@ -91,7 +93,7 @@ function resolveMode(root) {
 }
 const MODE = resolveMode(ROOT);
 // 写命令清单（T00）：引擎态下默认拒绝，需 --allow-engine-write 显式放行
-const WRITE_CMDS = new Set(["add", "candidate", "domains", "mutate", "supersede", "correct", "index", "maintain", "distill", "organize", "relink", "import", "reject", "dream"]);
+const WRITE_CMDS = new Set(["add", "candidate", "domains", "mutate", "supersede", "correct", "index", "maintain", "distill", "organize", "relink", "import", "reject", "dream", "feedback"]);
 // 便携运行时（K15 修复配套）；ROOT 缺 tools/node 时（沙箱/副拷贝）回退当前 node——
 //   否则 spawnSync 静默 ENOENT 空输出（2026-08-31 expand 沙箱测试暴露）
 const NODE_BIN = existsSync(join(ROOT, "tools", "node", "node.exe")) ? join(ROOT, "tools", "node", "node.exe") : process.execPath;
@@ -2418,13 +2420,33 @@ function cmdImport(fromDir) {
   out({ imported, conflicts, note: "冲突条目需人工裁决；legacy 条目加 status: 🕰️ + tags: [legacy] 降权" });
 }
 
+function cmdFeedback(subArgs) {
+  if (!memoryFeedback) return out({ ok: false, error: "feedback 模块不可用（node:sqlite 未启用或模块缺失）", code: "FEEDBACK_UNAVAILABLE" });
+  const sub = subArgs[0];
+  const flag = (k) => candidateArg(subArgs, k);
+  try {
+    let result;
+    if (sub === "add") result = memoryFeedback.addFeedback(ROOT, { memory_id: flag("--memory"), verdict: flag("--verdict"), marker: flag("--marker"), task_ref: flag("--task"), note: flag("--note") });
+    else if (sub === "stats") result = memoryFeedback.feedbackStats(ROOT, { memory_id: flag("--memory") });
+    else if (sub === "list") result = memoryFeedback.listFeedback(ROOT, { memory_id: flag("--memory") });
+    else if (sub === "rebuild") result = memoryFeedback.feedbackStats(ROOT, {});
+    else if (sub === "suggest") result = memoryFeedback.suggestReview(ROOT, { explicit_user_confirmation: subArgs.includes("--user-confirmed"), actor: flag("--actor") });
+    else return out({ ok: false, error: "用法: feedback add|stats|list|rebuild|suggest", code: "INVALID_COMMAND" });
+    out(result);
+  } catch (error) {
+    out({ ok: false, error: String(error.message || error), code: error.code || "FEEDBACK_ERROR" });
+    process.exitCode = 1;
+  }
+}
+
 // ---------- 入口 ----------
 const args = process.argv.slice(2);
 const cmd = args[0];
 const candidateDistillDryRun = cmd === "candidate" && args[1] === "distill-events" && !args.includes("--apply");
 const domainsReadOnly = cmd === "domains" && (args[1] === "status" || args[1] === "search" || (args[1] === "candidate" && ["list", "show"].includes(args[2])));
+const feedbackReadOnly = cmd === "feedback" && ["stats", "list", "rebuild"].includes(args[1]);
 // T00 根隔离护树：引擎态下写命令默认拒绝；显式 domains 查询保持只读。
-if (WRITE_CMDS.has(cmd) && MODE !== "instance" && !candidateDistillDryRun && !domainsReadOnly && !process.argv.includes("--allow-engine-write")) {
+if (WRITE_CMDS.has(cmd) && MODE !== "instance" && !candidateDistillDryRun && !domainsReadOnly && !feedbackReadOnly && !process.argv.includes("--allow-engine-write")) {
   out({ ok: false, blocked: "ENGINE_MODE_WRITE", mode: MODE, root: ROOT,
     hint: "当前根不是完整实例（无 memories/ 或 events.db）。写命令默认拒绝；确实要写就加 --allow-engine-write，或用 --root <完整实例目录>" });
   process.exit(1);
@@ -2514,6 +2536,7 @@ switch (cmd) {
   case "search": await cmdSearch(positionalAfterCommand(), positiveInt(get("--top"), 3, 50), { abstain: args.includes("--abstain") }); break;
   case "candidate": cmdCandidate(args.slice(1)); break;
   case "domains": cmdDomains(args.slice(1)); break;
+  case "feedback": cmdFeedback(args.slice(1)); break;
   case "recall": await cmdRecall(positionalAfterCommand(), positiveInt(get("--days"), 3, 30), positiveInt(get("--bytes"), 3000, 20000)); break;
   case "add": cmdAdd(args[1], { scope: get("--scope"), tags: get("--tags"), type: get("--type"), source: get("--source"), epistemic: get("--epistemic"), sourceKind: get("--source-kind"), situation: get("--situation"), entities: get("--entities") }); break;
   case "log": cmdLog(get("--transcript"), get("--session")); break;
@@ -2700,5 +2723,5 @@ switch (cmd) {
     out(queryGraph(ROOT, rest.join(" ").trim()));
     break;
   }
-  default: out({ usage: "search|add|log|inject|current|resume|reply-check|arrival-check|index|verify|distill|maintain|stats|quota|import|events|expand|relink|links|refs|lineage|graph|ref-hunt|judge|view" });
+  default: out({ usage: "search|add|log|inject|current|resume|reply-check|arrival-check|index|verify|distill|maintain|stats|quota|import|events|expand|relink|links|refs|lineage|graph|ref-hunt|judge|view|feedback" });
 }

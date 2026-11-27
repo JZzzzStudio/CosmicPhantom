@@ -13,7 +13,7 @@ const files = [
   "memory-domains.js", "memory-retrieval.js", "privacy-probe.js", "reply-check.js", "resume-context.js", "session-adapter.js",
   "skills-sync.js", "tag-normalize.js", "topic-tree.js", "validate.js",
 ];
-const dirs = ["lib/binary-vec.js", "lib/failopen.js", "lib/sync-check.js", "lib/verify-absorbed.js", "resources/mcp-server/index.js"];
+const dirs = ["lib/binary-vec.js", "lib/failopen.js", "lib/memory-feedback.js", "lib/sync-check.js", "lib/verify-absorbed.js", "resources/mcp-server/index.js"];
 for (const relative of [...files, ...dirs]) {
   const source = path.join(root, relative);
   const destination = path.join(target, relative);

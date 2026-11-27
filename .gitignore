@@ -39,6 +39,7 @@ eval/baseline-history.jsonl
 eval/suite-accepts.jsonl
 tags-baseline.json
 failopen-stats.json
+feedback-stats.json
 
 # Large/rebuilt assets
 node_modules/

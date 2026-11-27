@@ -140,7 +140,7 @@ function entityFiles(root) {
   const base = baseOf(root);
   return MEMORY_DOMAINS.flatMap(value => jsonFiles(join(base, "domains", value, "memories")));
 }
-function locateEntity(root, memoryId) {
+export function locateEntity(root, memoryId) {
   const wanted = text(memoryId, "memory_id");
   const found = entityFiles(root).map(path => ({ path, entity: readJson(path) }))
     .filter(item => item.entity.entity_id === wanted || item.entity.versions?.some(version => version.memory_id === wanted));
