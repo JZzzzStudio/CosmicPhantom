@@ -80,7 +80,7 @@ const rec = {
   evidence: evidence || null,
   testedAt: now.toISOString(),
   observedMtime: observedMtimeMs ? new Date(observedMtimeMs).toISOString() : null,
-  by: arg('--by') || 'Proma',
+  by: arg('--by') || 'agent',
 };
 
 try {

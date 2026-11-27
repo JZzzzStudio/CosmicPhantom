@@ -22,6 +22,7 @@ function run(name, args, opts = {}) {
 
 run('sanitize（无个人路径/密钥）', ['scripts/check-sanitize.cjs']);
 run('public surface（公开入口无私有接线）', ['scripts/check-public-surface.cjs']);
+run('engine consistency（根↔plugin 同步 + 无宿主品牌文件）', ['scripts/check-engine-consistency.cjs']);
 
 // 自检：有数据仓/事件库才跑 verify，纯代码仓跳过（不算失败）
 if (existsSync(join(ROOT, 'events.db'))) {

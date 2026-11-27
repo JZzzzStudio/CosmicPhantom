@@ -262,7 +262,7 @@ function updateCurrentStateTool(params) {
 // 透明说明：link-graph.js 的 queryLinks 原语只返回 superseded_by/supersedes/ref，
 // 不含 referenced_by（反向边属 queryRefs 原语）。memory_links 要求单节点"出入边"齐全，
 // 故组合 queryLinks + queryRefs 两个读原语，未修改 link-graph.js（无静默改）。
-// Proma 验收发现（2026-08-29）：links.json 节点键=绝对路径（去 .md），工具描述却引导短 id
+// 验收发现（2026-08-29）：links.json 节点键=绝对路径（去 .md），工具描述却引导短 id
 // → 短 id 一律 found:false。修法：工具层短 id 解析（文件名即 id 惯例：memories/<id>.md 含
 // 过去/ 子目录，递归兜底），已含路径分隔/盘符的入参原样透传。
 function resolveCardId(raw) {

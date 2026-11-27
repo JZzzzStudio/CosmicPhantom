@@ -11,8 +11,8 @@
 //   · --oracle：用金标 evidence 原文，测读者上限；不给则是真实检索结果，测端到端。
 //
 // 用法：
-//   PROMA_API_KEY=... node eval/e2e-llm-reader.mjs --all --cats 3 --oracle --model gemini-3.8-flash
-//   PROMA_API_KEY=... node eval/e2e-llm-reader.mjs --all --cats 3 --model gemini-3.8-flash
+//   LLM_API_KEY=... node eval/e2e-llm-reader.mjs --all --cats 3 --oracle --model gemini-3.8-flash
+//   LLM_API_KEY=... node eval/e2e-llm-reader.mjs --all --cats 3 --model gemini-3.8-flash
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
@@ -38,8 +38,8 @@ const CATS = String(arg('--cats', '')).split(',').filter(Boolean);
 // 模型名惰性求值（2026-11-19）：声明时读环境会拿到空值，必须在真正调用前再读一次
 const modelName = () => arg('--model', '') || process.env.LLM_MODEL || '';
 const CONCURRENCY = Number(arg('--concurrency', 4));
-// 凭据解析（2026-11-19）：优先环境变量；否则自动读 Proma 渠道里已启用的 OpenAI 兼容渠道
-//   （用户本机配的是「通义千问 Token Plan」，走 aliyuncs compatible-mode）。绝不打印 key。
+// 凭据解析（2026-11-19）：优先环境变量；否则读本机 .env.local（不入 git）
+//   绝不打印 key。
 function loadEnvLocal() {
   // 本机密钥文件（不入 git）：KEY=VALUE 逐行。让「用户贴一次 key」之后所有评测都能直接用。
   try {
@@ -53,26 +53,11 @@ function loadEnvLocal() {
 }
 loadEnvLocal();
 function resolveCreds() {
-  // 供应商中立（2026-11-19）：只认「OpenAI 兼容接口」，不绑定任何厂商。
-  //   LLM_API_KEY / LLM_BASE_URL / LLM_MODEL 是唯一正式入口；其余前缀仅为历史兼容。
-  let key = process.env.LLM_API_KEY || process.env.PROMA_API_KEY || process.env.QWEN_API_KEY || process.env.DASHSCOPE_API_KEY || '';
-  if (!process.env.QWEN_BASE_URL && !process.env.PROMA_BASE_URL) process.env.QWEN_BASE_URL = process.env.QWEN_BASE_URL || '';
-  let base = process.env.LLM_BASE_URL || process.env.PROMA_BASE_URL || process.env.QWEN_BASE_URL || '';
-  if (!key || !base) {
-    try {
-      const p = path.join(process.env.USERPROFILE || process.env.HOME || '', '.proma', 'channels.json');
-      const j = JSON.parse(fs.readFileSync(p, 'utf8'));
-      const list = Array.isArray(j) ? j : (j.channels || Object.values(j));
-      const arr = Array.isArray(list) ? list : [list];
-      const ch = arr.find((c) => c && c.enabled !== false && /qwen|dashscope|aliyun/i.test(String(c.provider || '') + String(c.name || '')));
-      if (ch) {
-        key = key || ch.apiKey || ch.key || ch.token || '';
-        base = base || ch.baseUrl || '';
-      }
-    } catch { /* 读不到就走环境变量 */ }
-  }
-  if (!base) base = 'https://api.proma.cool';
-  // 兼容两种基址：已含 /v1 的直接拼 /chat/completions，否则补 /v1
+  // 供应商中立：只认 OpenAI 兼容接口。LLM_API_KEY / LLM_BASE_URL / LLM_MODEL 是唯一入口；
+  //   本机密钥也可放 .env.local（不入 git，由 loadEnvLocal 读取）。绝不打印 key。
+  const key = process.env.LLM_API_KEY || '';
+  let base = process.env.LLM_BASE_URL || '';
+  if (!base) { console.error('缺 LLM_BASE_URL：设 OpenAI 兼容接口基址'); process.exit(1); }
   base = base.replace(/\/$/, '');
   const endpoint = base.includes('/v1') ? base + '/chat/completions' : base + '/v1/chat/completions';
   return { key, base, endpoint };
@@ -83,7 +68,7 @@ const BASE = CREDS.base;
 const ENDPOINT = CREDS.endpoint;
 const LIMIT = Number(arg('--limit', 0));   // 调试用：每题集只跑前 N 题
 
-if (!KEY) { console.error('缺 API key：设 PROMA_API_KEY，或在 ~/.proma/channels.json 里启用一个 OpenAI 兼容渠道'); process.exit(1); }
+if (!KEY) { console.error('缺 API key：设 LLM_API_KEY（OpenAI 兼容接口）'); process.exit(1); }
 const DATA = path.join(__dirname, 'external', 'data', 'locomo10.json');
 if (!fs.existsSync(DATA)) { console.error('缺少数据：' + DATA); process.exit(1); }
 const all = JSON.parse(fs.readFileSync(DATA, 'utf8'));

@@ -127,7 +127,8 @@ function createExplicitConfiguration() {
 
   const now = Date.now();
   const tag = localDateTag(now);
-  const hookEvent = JSON.stringify({ event: "hook.run.failed", timestamp: new Date(now).toISOString() }) + "\n";
+  const hookTs = Math.max(now, fs.statSync(hookConfig).mtimeMs + 1000);
+  const hookEvent = JSON.stringify({ event: "hook.run.failed", timestamp: new Date(hookTs).toISOString() }) + "\n";
   write(path.join(hookLogDir, `hook-${tag}.jsonl`), hookEvent);
   const transcript = path.join(projectsDir, "project", "session.jsonl");
   write(transcript, "{}\n");

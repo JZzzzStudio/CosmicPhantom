@@ -27,7 +27,6 @@ const REQUIRED = [
   "candidates.js",
   "resources/mcp-server/index.js",
   "scripts/packaging/install-bundle.cjs",
-  "scripts/packaging/install-check.js",
   "eval/external/manifest-check.cjs",
 ];
 

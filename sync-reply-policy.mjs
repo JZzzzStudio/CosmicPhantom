@@ -6,7 +6,7 @@
  * 派生物:各宿主注入文件的「回复门禁」段(<!-- reply-policy:start/end --> 标记包裹,幂等替换)。
  * 守卫:verify F20 逐条比对派生物与单源,漂移即 stale(本脚本先跑则永不漂移;直接手改注入文件会被 F20 抓)。
  *
- * 2026-09-15 B2 修复:原仅支持单宿主(--agents 默认 ~/.zcode/AGENTS.md),Claude Code 侧只能手工同步。
+ * 2026-09-15 B2 修复:支持多宿主目标（hosts.json 声明或 --agents 显式传入）。
  *   现改为多目标(HOST_TARGETS),--agents 可多次传入以覆盖默认列表。
  *   背景:Claude Code 于 2026-09-15 升为主宿主,门禁段必须自动跟随真源。
  *
@@ -33,11 +33,8 @@ function loadHostTargets() {
     const raw = readFileSync(join(ROOT, "hosts.json"), "utf8").replace(/^\uFEFF/, "");
     const hosts = (JSON.parse(raw).hosts || []).filter((h) => h.agentFile && h.role !== "retired");
     if (hosts.length) return hosts.map((h) => ({ host: h.name, file: join(homedir(), h.agentFile) }));
-  } catch { /* 注册表不可用 → 兜底，宁可多同步不漏同步 */ }
-  return [
-    { host: "ZCode", file: join(homedir(), ".zcode", "AGENTS.md") },
-    { host: "Claude Code", file: join(homedir(), ".claude", "CLAUDE.md") },
-  ];
+  } catch { /* 注册表不可用 → 无声明目标，可见跳过，不隐式探测宿主目录 */ }
+  return [];
 }
 
 // --agents 可多次传入；未传则用默认列表

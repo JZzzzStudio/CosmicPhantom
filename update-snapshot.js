@@ -2,7 +2,7 @@
 /**
  * update-snapshot.js — AGENTS.md 状态快照刷新（强执行通道 2，2026-08-12）
  *
- * ZCode 每次新会话自动注入工作区 AGENTS.md（已实证）——收尾时刷新快照段，
+ * 宿主每次新会话自动注入工作区 AGENTS.md——收尾时刷新快照段，
  * 新会话开场即带当前状态，不靠 Agent 自觉执行 recall。
  * 与 MCP instructions（通道 1）双保险：任一被宿主支持即生效。
  *

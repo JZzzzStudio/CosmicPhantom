@@ -4,7 +4,7 @@
  *
  * 回答"谁在什么时间改动了什么":
  *   ① 管道内修改 → events.db 已有 instance+ts 溯源,daily 段头已加"通道："标注(不改本脚本);
- *   ② 直接改文件(盲区,Proma 事故形态) → 本脚本在 verify/收尾时对内容层做 SHA-256 指纹对账,
+ *   ② 直接改文件(盲区,宿主事故形态) → 本脚本在 verify/收尾时对内容层做 SHA-256 指纹对账,
  *      变更逐文件归因(文件 mtime 与 events.db 各 instance 会话活动窗口对齐,120 分钟窗),
  *      追加 change-log.jsonl;归因对不齐 = "无归因变更"(F19 进 stale 第一屏报警)。
  *   ③ git 快照层:检出变更即自动 commit(author=主归因 instance),任意时点可 diff/回滚。

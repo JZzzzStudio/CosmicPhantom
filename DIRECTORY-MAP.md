@@ -101,7 +101,7 @@ reply-policy.json
 
 ### 接入、同步和运行配置
 
-`bootstrap.cjs`、`compaction-inject.cjs`、`cp-exec.cjs`、`cp-sync.cjs`、`mcp-smoke.cjs`、`precompact-probe.cjs`、`skill-log.cjs`、`skills-sync.js`、`sync-reply-policy.mjs`、`task-card-gate.cjs`、`plugin/launcher.cjs`、`scripts/packaging/check-plugin.cjs`、`scripts/packaging/pack-plugin.cjs`、`scripts/packaging/sync-plugin-engine.cjs`
+`bootstrap.cjs`、`cp-exec.cjs`、`cp-sync.cjs`、`mcp-smoke.cjs`、`precompact-probe.cjs`、`skill-log.cjs`、`skills-sync.js`、`sync-reply-policy.mjs`、`plugin/launcher.cjs`、`scripts/packaging/check-plugin.cjs`、`scripts/packaging/pack-plugin.cjs`、`scripts/packaging/sync-plugin-engine.cjs`
 
 ## 📦 当前低频入口与历史入口
 

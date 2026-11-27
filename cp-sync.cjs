@@ -5,7 +5,7 @@
 //
 // 用法：
 //   node cp-sync.cjs engine status            看引擎仓改动
-//   node cp-sync.cjs engine commit [-m 说明]  提交引擎仓（带 Made-with: Proma）
+//   node cp-sync.cjs engine commit [-m 说明]  提交引擎仓（带 Made-with: Cosmic Phantom）
 //   node cp-sync.cjs engine push              推送引擎仓（需已配 origin）
 //   node cp-sync.cjs data push [-m 说明]      把数据镜像到 ~/cp-memory 并提交+推送
 //   node cp-sync.cjs data pull                从 ~/cp-memory 拉回（换机恢复用）
@@ -29,7 +29,7 @@ const GIT = [
 ].filter(Boolean).find((p) => p === 'git' || existsSync(p));
 
 const DATA_DIR = process.env.CP_DATA_DIR || join(homedir(), 'cp-memory');
-const TRAILER = 'Made-with: Proma';
+const TRAILER = 'Made-with: Cosmic Phantom';
 
 // 2026-11-19：推送前把 WAL 落盘。events.db-wal/-shm 不进版本库，
 //   若推时 WAL 里还有未 checkpoint 的事务，远端拿到的是残缺库。

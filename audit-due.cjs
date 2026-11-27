@@ -43,9 +43,8 @@ const KEY_FILES = [
   'resume-context.js', 'current-state.js', 'link-graph.js', 'session-adapter.js',
   'decision-cards.js', 'update-snapshot.js', 'sync-reply-policy.mjs', 'skills-sync.js',
   'embed.js', 'identity-card.js', 'inject-config.js',
-  // 宿主适配层（本机 Claude Code 侧）
-  'claude-flush.cjs', 'claude-hook-wrap.cjs', 'compaction-inject.cjs',
-  'flush-reminder.cjs', 'task-card-gate.cjs', 'wrap-up.cjs', 'change-ledger.cjs', 'audit-due.cjs',
+  // 收尾与维护层
+  'wrap-up.cjs', 'change-ledger.cjs', 'audit-due.cjs',
   // C1 交付台账写入点（2026-09-29 STS×CP 补入；改了 = 改「交付前必测」的记账机制）
   'record-delivery-test.cjs',
   // 继承包链路（2026-09-19 补入 —— 原清单**漏了它们**，而这两个恰恰是「在新机上跑一次、错了不好回头」的东西；

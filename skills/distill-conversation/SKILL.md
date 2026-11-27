@@ -5,7 +5,7 @@ description: 对话蒸馏提纯。将历史对话蒸馏为结构化精华档案�
 
 # 🧪 对话蒸馏提纯（distill-conversation）
 
-> 可复制、可搬运：本 skill 自包含全部规则，不依赖任何宿主平台特性。复制本目录到任意宿主（Hermes/WorkBuddy/Proma/Claude Code…）的 skills 目录即可用；所有路径用 `<根>` 占位（= Cosmic Phantom 系统根），跨机改一处即可。
+> 可复制、可搬运：本 skill 自包含全部规则，不依赖任何宿主平台特性。复制本目录到任意宿主的 skills 目录即可用；所有路径用 `<根>` 占位（= Cosmic Phantom 系统根），跨机改一处即可。
 
 ## 🎯 角色与目标
 你是对话蒸馏师。输入是原始对话记录（可多段、多会话、含闲聊与噪音），

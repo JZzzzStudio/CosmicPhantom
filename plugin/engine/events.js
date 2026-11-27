@@ -242,9 +242,7 @@ function channelName(instance, session, sourceKind) {
   if (explicit) return explicit;
   const s = String(instance || "");
   if (s === "manual" && String(session || "").startsWith("session-")) return "SessionAdapter";
-  if (s.startsWith("zcode")) return "ZCode";
-  if (s.startsWith("proma")) return "Proma";
-  if (s.startsWith("wb-") || s.startsWith("workbuddy")) return "WorkBuddy";
+  if (s.startsWith("zcode") || s.startsWith("proma") || s.startsWith("wb-") || s.startsWith("workbuddy")) return "Legacy JSONL";
   if (s.startsWith("session-")) return "SessionAdapter";
   if (s === "manual") return "Manual";
   return s || "未知";
@@ -259,7 +257,7 @@ function filterProjectedUserText(value) {
   return match ? match[1] : null;
 }
 
-// P1-5(2026-08-29):proma midCheck 的 mid 口径=内容 hash。规格与 proma-adapter.js hashMid
+// P1-5(2026-08-29):legacy JSONL midCheck 的 mid 口径=内容 hash。规格与 legacy adapter hashMid
 //   逐字一致(sha256(role+"\n"+content) hex 前 12 位转 48bit 整数);两处实现漂移由 midCheck 对账自动暴露。
 function hashMid(role, content) {
   return parseInt(createHash("sha256").update(`${role}\n${content || ""}`).digest("hex").slice(0, 12), 16);
@@ -330,7 +328,7 @@ function ingestInternal(dbPath) {
       const known = JSON.parse(metaGet(db, "ended_sessions") || "[]");
       const fresh = ended.filter(id => !known.includes(id));
       if (fresh.length) { endedNew = fresh.length; metaSet(db, "ended_sessions", JSON.stringify(ended)); }
-    } catch { /* 非 Hermes 库 */ }
+    } catch { /* 非本地事件库 */ }
     return { instance: inst.short, cursor: Number(metaGet(db, "cursor") || 0), ingested, endedNew, endedSemantic, at: now };
   } catch (e) { logErr(`ingest: ${e.message}`); return { error: e.message }; }
   finally { try { db.close(); } catch {} try { src.close(); } catch {} }
@@ -421,7 +419,7 @@ function projectInternal() {
           if (c.includes("[摘要]")) { block += `- [摘要] ${c}\n`; rendered += 1; }
           else if (c.trim().startsWith("🛠️")) { block += `- **🛠️ Agent（成果）**：${c.trim().replace(/^🛠️\s*/, "")}\n`; rendered += 1; }
           else {
-            // D-05（2026-10-28）：Proma 等宿主的回复是一大段文本，成果行未必在开头。
+            // D-05（2026-10-28）：宿主的回复是一大段文本，成果行未必在开头。
             //   只提取“行首 🛠️ + 非空”的短行（32-300 字），最多 3 条；避免表格/代码示例误收。
             const hits = c.split(/\r?\n/).map(line => line.trim()).filter(line => /^🛠️\s+\S/.test(line) && line.length >= 32 && line.length <= 300).slice(0, 3);
             for (const h of hits) block += `- **🛠️ Agent（成果）**：${h.replace(/^🛠️\s*/, "")}\n`;
@@ -463,8 +461,8 @@ function extractText(msg) {
   return "";
 }
 
-// ZCode 稳定来源输入：sourceId/session/content/ts JSONL → events → project
-function zcodeInternal(sourceFile) {
+// 稳定来源 JSONL 输入：sourceId/session/content/ts → events → project
+function jsonlInternal(sourceFile) {
   if (!sourceFile || !existsSync(sourceFile)) return { logged: 0, empty: true, error: "no source" };
   let lines;
   try { lines = readFileSync(sourceFile, "utf8").replace(/^\uFEFF/, "").replace(/\r\n/g, "\n").split("\n").filter(Boolean); }
@@ -485,9 +483,9 @@ function zcodeInternal(sourceFile) {
   try {
     const identityHealth = sourceIdentityHealth(db);
     if (!identityHealth.ok) return { logged: 0, skipped: 0, error: "来源身份完整性失败: " + JSON.stringify(identityHealth) };
-    // M1 修复(2026-08-29):zcode 通道 INSERT 原缺 src_host 列(此前修复只覆盖 manual 通道:398-411),
+    // M1 修复(2026-08-29):jsonl 通道 INSERT 原缺 src_host 列(此前修复只覆盖 manual 通道:398-411),
     // 导致 config.json env.CP_HOST 设了也全空。补列+补 env 读取,与 manual 通道对齐。
-    const SRC_HOST = process.env.CP_HOST || null;   // 由 zcode-flush.cjs spawnSync 显式传入(hook 进程 env 无此变量,fallback 在 flush 侧)
+    const SRC_HOST = process.env.CP_HOST || null;   // 由宿主 flush hook spawnSync 显式传入(hook 进程 env 无此变量,fallback 在 flush 侧)
     const ins = db.prepare("INSERT OR IGNORE INTO events(instance, mid, session, role, content, tool_name, tool_calls, ts, sensitive, src_host, source_root, source_machine, source_id) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)");
     db.exec("BEGIN IMMEDIATE")   // IMMEDIATE：写锁提前获取，受 busy_timeout 管（DEFERRED 升级锁 BUSY 不等待，2026-08-29 压测实证丢写）;
     try {
@@ -499,7 +497,7 @@ function zcodeInternal(sourceFile) {
       db.exec("COMMIT");
     } catch (e) {
       db.exec("ROLLBACK");
-      logErr(`zcode 事务回滚: ${e.message}`);
+      logErr(`jsonl 事务回滚: ${e.message}`);
       return { logged: 0, skipped: 0, error: e.message };
     }
   } finally { try { db.close(); } catch {} }
@@ -696,7 +694,7 @@ function coverageInternal() {
         // gap = absorbable - absorbed 才是真缺口（游标未跑完/整文件未摄取会暴露）
         // P0-5 升级（2026-08-28）：注册条目声明 midCheck 时做逐 (instance,mid) 双向集合核对——
         //   missing=源有库无（漏吸）/ extra=库有源无（多吸·源文件变更遗留）/ drifted=同键 role·content 不一致（保真核验）。
-        //   行号与内容口径必须与各 adapter 的 scanFile 逐字一致（proma: 非空行序号 1 基 + extractText 原样 + 前缀+文件名前 take 位）。
+        //   行号与内容口径必须与各 adapter 的 scanFile 逐字一致（legacy adapter: 非空行序号 1 基 + extractText 原样 + 前缀+文件名前 take 位）。
         const midCheck = s.midCheck && s.instancePrefix ? { take: s.midCheck.take || 8 } : null;
         const srcRows = midCheck ? new Map() : null;
         let fileLines = 0, absorbable = 0, lastScan = null, lastScanMs = -1;
@@ -716,7 +714,7 @@ function coverageInternal() {
             const t = extractText(msg);
             if ((rec.type === "user" || rec.type === "assistant") && t !== "") {
               absorbable += 1;
-              // P1-5(2026-08-29):mid 口径=内容 hash,与 proma-adapter hashMid 规格逐字一致
+              // P1-5(2026-08-29):mid 口径=内容 hash,与 legacy adapter hashMid 规格逐字一致
               //   (sha256(role+"\n"+content) hex 前 12 位转整数);行号口径已弃(流式重写打破)。
               srcRows.set(`${inst}\0${hashMid(rec.type, t)}`, { role: rec.type, content: t, file: f, lineNo });
             }
@@ -798,7 +796,7 @@ function coverageInternal() {
     } catch (e) { independence = { error: String(e.message || e) }; }
   } finally { try { db.close(); } catch {} }
   const jsonl = report.filter(r => r.kind === "jsonl" && !r.error);
-  // F18 源文件消失检测（2026-08-29 Proma 事故驱动：升级清空 agent-sessions 16 文件、887 可吸行蒸发，验收 AI 报"对齐"零报警）。
+  // F18 源文件消失检测（2026-08-29 宿主升级事故驱动：升级清空会话目录 16 文件、887 可吸行蒸发，验收 AI 报"对齐"零报警）。
   //   absorbable 环比暴跌 >50% → 🔴 严重警告进 gaps；历史快照落 coverage-history.json（工具自留状态，非真源）。
   try {
     const histFile = join(ROOT, "coverage-history.json");
@@ -1280,8 +1278,8 @@ switch (cmd) {
     if (result.error) process.exitCode = 1;
     break;
   }
-  case "zcode": {
-    const result = zcodeInternal(get("--source"));
+  case "jsonl": {
+    const result = jsonlInternal(get("--source"));
     out(result);
     if (result.error || result.projection?.ok === false) process.exitCode = 1;
     break;

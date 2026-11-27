@@ -88,7 +88,7 @@ function jparse(r) { const s = (r.out || "").trim(); const i = s.indexOf("{"); t
   // 预置同主题既有卡（type=事件；正文标点内嵌使候选非其子串，绕过原文重复跳过、命中 topicKey 合并）
   fs.writeFileSync(path.join(MEM, "20260810-0005.md"), `---\nid: 20260810-0005\ncreated: 2026-08-10T09:00:00+08:00\nsource: daily/2026-08-10.md\nstatus: 🟢当前\ntype: 事件\ntags: [决策]\nscope: workspace\n---\n每周三。发布\n`);
   const dailyPath = path.join(ROOT, "daily", "2026-08-10.md");
-  fs.writeFileSync(dailyPath, "# 2026-08-10 工作日志\n\n## 会话 t1（2026-08-10T02:00:00.000Z）· 通道：ZCode\n- **⭐👤 用户（决策）**：每周三发布\n---\n", "utf8");
+  fs.writeFileSync(dailyPath, "# 2026-08-10 工作日志\n\n## 会话 t1（2026-08-10T02:00:00.000Z）· 通道：Legacy JSONL\n- **⭐👤 用户（决策）**：每周三发布\n---\n", "utf8");
   const dc = jparse(run("decision-cards.js", ["--date", "2026-08-10"]));
   check("T7a 同主题决策走合并不新建", (dc.merged || []).length === 1 && (dc.generated || []).length === 0, JSON.stringify({ generated: dc.generated, merged: dc.merged, skipped: dc.skipped }));
   const dc2 = jparse(run("decision-cards.js", ["--date", "2026-08-10"]));

@@ -24,8 +24,8 @@ function loadEnv() {
   }
 }
 loadEnv();
-const KEY = process.env.LLM_API_KEY || process.env.PROMA_API_KEY || '';
-const BASE = (process.env.LLM_BASE_URL || process.env.PROMA_BASE_URL || process.env.DEEPSEEK_BASE_URL || 'https://api.deepseek.com/v1').replace(/\/$/, '');
+const KEY = process.env.LLM_API_KEY || '';
+const BASE = (process.env.LLM_BASE_URL || '').replace(/\/$/, '');
 const ENDPOINT = BASE.includes('/v1') ? BASE + '/chat/completions' : BASE + '/v1/chat/completions';
 const MODEL = arg('--model', process.env.LLM_MODEL || '');
 // 2026-11-19（票 07）：判分模型必须与作答模型分离，否则是同一模型自评。

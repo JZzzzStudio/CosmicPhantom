@@ -1480,7 +1480,7 @@ function cmdVerify() {
     }
   } catch { /* fail-open */ }
   // F19 无归因变更守卫（2026-08-29）：change-log.jsonl 最近 48h 内存在"无归因文件变更" = 有非 agent
-  //   管道路径的内容层改动（Proma 事故形态），必须顶到 stale 提醒人工确认。
+  //   管道路径的内容层改动（宿主事故形态），必须顶到 stale 提醒人工确认。
   try {
     const cl = join(ROOT, "change-log.jsonl");
     if (existsSync(cl)) {

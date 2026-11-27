@@ -151,7 +151,7 @@ R1 的 23 题里 **±1 题 = 4.3pt**（挑刺 B3 的原始教训），差异 ≤
 node eval/e2e-run.mjs --all --oracle          # 金标证据直给 → 读者下限
 node eval/e2e-run.mjs --all                   # 真实检索 → 端到端下限
 
-# 生成式读者（需 PROMA_API_KEY 与额度）
-PROMA_API_KEY=... node eval/e2e-llm-reader.mjs --all --cats 3 --oracle --model <可用模型>
-PROMA_API_KEY=... node eval/e2e-llm-reader.mjs --all --cats 3 --model <可用模型>
+# 生成式读者（需 LLM_API_KEY 与额度）
+LLM_API_KEY=... node eval/e2e-llm-reader.mjs --all --cats 3 --oracle --model <可用模型>
+LLM_API_KEY=... node eval/e2e-llm-reader.mjs --all --cats 3 --model <可用模型>
 ```

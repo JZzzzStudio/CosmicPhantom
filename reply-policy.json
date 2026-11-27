@@ -3,8 +3,7 @@
   "revision": 2,
   "source": [
     "core/rules.md",
-    "core/reply-style.md",
-    "hermes-home/memories/USER.md"
+    "core/reply-style.md"
   ],
   "language": "zh-CN",
   "opening": "先给独立结论，再给必要理由；被纠正时第一句直接说明错误和修法。",

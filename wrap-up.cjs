@@ -10,7 +10,7 @@
  *   ⑤maintain(index+distill+project-version+mirror)
  *
  * 用法(便携 node,需 --experimental-sqlite):
- *   node --experimental-sqlite wrap-up.cjs --root <root> [--actor zcode] [--patch-file patch.json] [--skip-state]
+ *   node --experimental-sqlite wrap-up.cjs --root <root> [--actor agent] [--patch-file patch.json] [--skip-state]
  * 任一步失败:打印 ❌ + 所在步骤,exit 1;全过:打印 ✅ 摘要。
  * patch 内容须过内容纪律(summary ≤100 字、objective ≤250B、nextActions ≤3 条,校验在 current-state.js)。
  */
@@ -22,7 +22,7 @@ const { homedir } = require("node:os");
 const arg = (name) => { const i = process.argv.indexOf(name); return i >= 0 ? process.argv[i + 1] : undefined; };
 const ROOT = arg("--root") || join(homedir(), ".cosmic-phantom");
 const NODE = process.env.CP_NODE || join(ROOT, "tools", "node", "node.exe");
-const ACTOR = arg("--actor") || process.env.CP_ACTOR || "zcode";
+const ACTOR = arg("--actor") || process.env.CP_ACTOR || "agent";
 const PATCH_FILE = arg("--patch-file");
 const SKIP_STATE = process.argv.includes("--skip-state");
 const cli = ["--experimental-sqlite"];
