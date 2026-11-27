@@ -17,7 +17,7 @@ import { spawnSync } from "node:child_process";
 
 const ROOT = process.argv.includes("--root") ? process.argv[process.argv.indexOf("--root") + 1] : join(homedir(), ".cosmic-phantom");
 const AGENTS_FILE = join(ROOT, "AGENTS.md");
-const NODE = join(ROOT, "tools", "node", "node.exe");
+const NODE = existsSync(join(ROOT, "tools", "node", "node.exe")) ? join(ROOT, "tools", "node", "node.exe") : process.execPath;
 const START = "<!-- snapshot-start -->";
 const END = "<!-- snapshot-end -->";
 

@@ -21,7 +21,7 @@ const { homedir } = require("node:os");
 
 const arg = (name) => { const i = process.argv.indexOf(name); return i >= 0 ? process.argv[i + 1] : undefined; };
 const ROOT = arg("--root") || join(homedir(), ".cosmic-phantom");
-const NODE = process.env.CP_NODE || join(ROOT, "tools", "node", "node.exe");
+const NODE = process.env.CP_NODE || (existsSync(join(ROOT, "tools", "node", "node.exe")) ? join(ROOT, "tools", "node", "node.exe") : process.execPath);
 const ACTOR = arg("--actor") || process.env.CP_ACTOR || "agent";
 const PATCH_FILE = arg("--patch-file");
 const SKIP_STATE = process.argv.includes("--skip-state");
